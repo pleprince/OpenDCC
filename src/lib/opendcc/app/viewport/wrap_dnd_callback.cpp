@@ -45,7 +45,14 @@ struct ViewportDndCallbackWrap : ViewportDndCallback
 
 void py_interp::bind::wrap_dnd_callback(pybind11::module& m)
 {
+    // pybind11 3 reserves the holder slot: class_<type_, options...> takes only bases there, so the explicit
+    // smart_holder the older fork accepted after the trampoline no longer applies. The default holder is what
+    // classh<T> would use anyway for a class with a trampoline.
+#if defined(PYBIND11_VERSION_HEX) && PYBIND11_VERSION_HEX >= 0x020D0000
+    class_<ViewportDndCallback, ViewportDndCallbackWrap>(m, "ViewportDndCallback")
+#else
     class_<ViewportDndCallback, ViewportDndCallbackWrap, smart_holder>(m, "ViewportDndCallback")
+#endif
         .def(init<>())
         .def("on_enter", &ViewportDndCallback::on_enter)
         .def("on_move", &ViewportDndCallback::on_move)

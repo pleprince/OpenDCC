@@ -14,7 +14,8 @@ else()
     find_library(
         ZMQ_LIBRARY
         NAMES zmq
-        PATHS ${ZMQ_ROOT}/bin $ENV{ZMQ_ROOT}/bin
+        # Homebrew and most Unix packages install libzmq.dylib/so in lib, not bin.
+        PATHS ${ZMQ_ROOT}/lib ${ZMQ_ROOT}/lib64 $ENV{ZMQ_ROOT}/lib $ENV{ZMQ_ROOT}/lib64
         DOC "ZeroMQ library")
 endif()
 

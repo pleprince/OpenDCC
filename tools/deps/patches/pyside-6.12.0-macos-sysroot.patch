@@ -1,0 +1,25 @@
+--- a/sources/pyside6/cmake/Macros/PySideModules.cmake	2026-10-01 17:02:02.000000000 +0200
++++ b/sources/pyside6/cmake/Macros/PySideModules.cmake
+@@ -393,6 +393,22 @@
+         set(shiboken_framework_include_dir_list ${QT_FRAMEWORK_INCLUDE_DIR})
+         make_path(shiboken_framework_include_dirs ${shiboken_framework_include_dir_list})
+         list(APPEND shiboken_command "--framework-include-paths=${shiboken_framework_include_dirs}")
++        # libclang (Homebrew's, not Apple's) does not inherit the CMake toolchain, so it lacks the SDK sysroot and
++        # cannot resolve its own libc++ headers (<math.h> macros stay undefined). OptionsParser::process() reads
++        # the options in reverse order, so paired flags are listed value-first.
++        set(qfp_apple_sysroot "${CMAKE_OSX_SYSROOT}")
++        if(NOT qfp_apple_sysroot OR qfp_apple_sysroot STREQUAL "macosx")
++            execute_process(COMMAND xcrun --show-sdk-path
++                            OUTPUT_VARIABLE qfp_apple_sysroot
++                            ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
++        endif()
++        if(qfp_apple_sysroot AND EXISTS "${qfp_apple_sysroot}")
++            list(APPEND shiboken_command
++                 "--clang-option=${qfp_apple_sysroot}"
++                 "--clang-option=-isysroot"
++                 "--compiler-argument=${qfp_apple_sysroot}"
++                 "--compiler-argument=-isysroot")
++        endif()
+     endif()
+ 
+     if(${module_DROPPED_ENTRIES})

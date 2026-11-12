@@ -1,0 +1,30 @@
+--- a/source/MaterialXGenShader/ShaderStage.cpp
++++ b/source/MaterialXGenShader/ShaderStage.cpp
+@@ -312,6 +312,14 @@
+ 
+ void ShaderStage::addBlock(const string& str, const FilePath& sourceFilename, GenContext& context)
+ {
++    // Skip a block that has already been emitted verbatim. Storm's Metal generator includes the shared shader
++    // library and the node implementations that live in that same library, so the text arrives twice; the
++    // second copy produced "class member cannot be redeclared" and the program failed to compile.
++    if (!_emittedBlocks.insert(str).second)
++    {
++        return;
++    }
++
+     const string& INCLUDE = _syntax->getIncludeStatement();
+     const string& QUOTE   = _syntax->getStringQuote();
+ 
+--- a/source/MaterialXGenShader/ShaderStage.h
++++ b/source/MaterialXGenShader/ShaderStage.h
+@@ -308,6 +308,10 @@
+     /// Set of include files that has been included.
+     StringSet _includes;
+ 
++    /// Blocks already emitted, keyed by their text. A node implementation whose source file is also pulled in
++    /// as a library include would otherwise be emitted twice and the shader would not compile.
++    StringSet _emittedBlocks;
++
+     /// Set of source file dependencies from source code nodes
+     StringSet _sourceDependencies;
+ 

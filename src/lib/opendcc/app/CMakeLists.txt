@@ -260,7 +260,12 @@ source_group(
           ${logger_h}
           ${logger_cpp})
 
-setup_update_translations(qm_files)
+# qm_files is a source of opendcc_lib, so an unusable lupdate path would fail the build rather than skip i18n.
+if(DCC_BUILD_I18N)
+    setup_update_translations(qm_files)
+else()
+    set(qm_files "")
+endif()
 
 add_library(
     opendcc_lib SHARED

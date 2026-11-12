@@ -3,3 +3,6 @@ install_dir
 .venv
 *.pyc
 ccache
+CMakeUserPresets.json
+deps/*.local.json
+__pycache__

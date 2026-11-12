@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "include": ["CMakePresets.json"],
+  "configurePresets": [
+    {
+      "name": "macos-arm64-release-ovdb",
+      "inherits": "macos-arm64-release",
+      "displayName": "macOS arm64 + OpenVDB in USD",
+      "environment": { "OPENDCC_DEPS_CONFIG": "${sourceDir}/deps/macos-arm64.local.json" }
+    }
+  ]
+}

@@ -244,14 +244,14 @@ if(DCC_INSTALL_PYTHON)
             DIRECTORY ${PYTHON_ROOT_DIR}/DLLs
             DESTINATION python/
             PATTERN ".svn" EXCLUDE)
-    elseif(APPLE)
-        install(
-            DIRECTORY
-                /usr/local/Frameworks/Python.framework/Versions/${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/lib/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/lib-dynload
-            DESTINATION lib/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})
-    else()
-        install(DIRECTORY /usr/local/lib/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/lib-dynload
+    elseif(PYTHON_BASE_PLATSTDLIB_DIR AND EXISTS "${PYTHON_BASE_PLATSTDLIB_DIR}/lib-dynload")
+        # The extension modules must sit where Py_SetPythonHome(<install prefix>) expects them;
+        # PYTHON_BASE_PLATSTDLIB_DIR comes from the interpreter itself (Packages.cmake), so no layout is assumed.
+        install(DIRECTORY "${PYTHON_BASE_PLATSTDLIB_DIR}/lib-dynload"
                 DESTINATION lib/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})
+    else()
+        message(WARNING "DCC_INSTALL_PYTHON is ON but ${PYTHON_BASE_PLATSTDLIB_DIR}/lib-dynload was not found; "
+                        "the embedded interpreter will miss its extension modules.")
     endif()
     set(PYTHON_EMBED_ARCHIVE_DEST ${CMAKE_INSTALL_PREFIX}/lib)
     if(WIN32)
@@ -343,6 +343,10 @@ if(DCC_INSTALL_USD)
         DESTINATION ${DCC_PYTHON_INSTALL_SITE_PACKAGES_ROOT}
         USE_SOURCE_PERMISSIONS
         PATTERN "rmanArgsParser*" EXCLUDE)
+    # Only the plugins this project builds are copied here. USD's own plugins and libraries stay in the dependency
+    # prefix: USD discovers its plugins relative to the install location of the loaded libusd_*, so a partial copy in
+    # this tree makes it look for the plugin set here, where hdStorm's base type (HdRendererPlugin, shipped by the hd
+    # plugin) is not part of the same set, and the render delegate is dropped as "Unknown base type".
     install(
         DIRECTORY ${USD_ROOT}/plugin/usd/
         DESTINATION plugin/usd
@@ -351,16 +355,65 @@ if(DCC_INSTALL_USD)
         PATTERN "hdxPrman*" EXCLUDE
         PATTERN "hdPrman*" EXCLUDE
         PATTERN "rmanArgsParser*" EXCLUDE
-        PATTERN "rmanDiscovery*" EXCLUDE)
+        PATTERN "rmanDiscovery*" EXCLUDE
+        PATTERN "hdStorm*" EXCLUDE
+        PATTERN "hioAvif*" EXCLUDE
+        PATTERN "hioImageIO*" EXCLUDE
+        PATTERN "hioOiio*" EXCLUDE
+        PATTERN "sdrGlslfx*" EXCLUDE
+        PATTERN "usdShaders*" EXCLUDE)
 endif()
 
 if(DCC_INSTALL_SENTRY)
+    # Packages export only the configurations they were built for; a Release-only bottle has no RELWITHDEBINFO location,
+    # and installing a NOTFOUND path fails the install step.
     get_target_property(SENTRY_CRASHPAD_HANDLER sentry_crashpad::crashpad_handler IMPORTED_LOCATION_RELWITHDEBINFO)
-    install(PROGRAMS "${SENTRY_CRASHPAD_HANDLER}" DESTINATION bin)
+    if(NOT SENTRY_CRASHPAD_HANDLER OR NOT EXISTS "${SENTRY_CRASHPAD_HANDLER}")
+        get_target_property(SENTRY_CRASHPAD_HANDLER sentry_crashpad::crashpad_handler IMPORTED_LOCATION_RELEASE)
+    endif()
+    if(NOT SENTRY_CRASHPAD_HANDLER OR NOT EXISTS "${SENTRY_CRASHPAD_HANDLER}")
+        get_target_property(SENTRY_CRASHPAD_HANDLER sentry_crashpad::crashpad_handler IMPORTED_LOCATION)
+    endif()
+    if(SENTRY_CRASHPAD_HANDLER AND EXISTS "${SENTRY_CRASHPAD_HANDLER}")
+        install(PROGRAMS "${SENTRY_CRASHPAD_HANDLER}" DESTINATION bin)
+    else()
+        message(WARNING "DCC_INSTALL_SENTRY is ON but the crashpad_handler binary was not found in the "
+                        "sentry-native package; crash reports will not be symbolicated.")
+    endif()
     if(WIN32)
         get_target_property(SENTRY_CRASHPAD_WER sentry_crashpad::crashpad_wer IMPORTED_LOCATION_RELWITHDEBINFO)
         list(APPEND INSTALL_SHARED_LIBS ${SENTRY_CRASHPAD_WER})
     endif()
+endif()
+
+# Python packages the application imports at runtime (Qt.py, pygments) come from the provisioned interpreter.
+if(DCC_DEPS_PYTHON_SITE_PACKAGES AND EXISTS "${DCC_DEPS_PYTHON_SITE_PACKAGES}")
+    install(FILES "${DCC_DEPS_PYTHON_SITE_PACKAGES}/Qt.py" "${DCC_DEPS_PYTHON_SITE_PACKAGES}/Qt_convert_enum.py"
+            DESTINATION ${DCC_PYTHON_INSTALL_SITE_PACKAGES_ROOT})
+    foreach(_package pygments six numpy)
+        if(EXISTS "${DCC_DEPS_PYTHON_SITE_PACKAGES}/${_package}")
+            install(DIRECTORY "${DCC_DEPS_PYTHON_SITE_PACKAGES}/${_package}"
+                    DESTINATION ${DCC_PYTHON_INSTALL_SITE_PACKAGES_ROOT})
+        else()
+            find_file(
+                _${_package}_module
+                NAMES "${_package}.py"
+                PATHS "${DCC_DEPS_PYTHON_SITE_PACKAGES}"
+                NO_DEFAULT_PATH)
+            if(_${_package}_module)
+                install(FILES "${_${_package}_module}" DESTINATION ${DCC_PYTHON_INSTALL_SITE_PACKAGES_ROOT})
+            endif()
+        endif()
+    endforeach()
+endif()
+
+# The application loads its colour-management config from <root>/ocio/config.ocio; without one it falls back to an empty
+# OCIO config and the viewport cannot build its display transform.
+if(DCC_DEPS_OCIO_CONFIG_FILE AND EXISTS "${DCC_DEPS_OCIO_CONFIG_FILE}")
+    install(
+        FILES "${DCC_DEPS_OCIO_CONFIG_FILE}"
+        DESTINATION ocio
+        RENAME config.ocio)
 endif()
 
 if(DCC_INSTALL_PYTHON_DEPS)
@@ -473,7 +526,7 @@ if(WIN32)
         get_filename_component(_ads_lib_dir ${_ads_lib} DIRECTORY)
         list(APPEND _search_dirs ${_ads_lib_dir})
     endif()
-    if(DCC_INSTALL_ALEMBIC)
+    if(DCC_INSTALL_ALEMBIC AND ALEMBIC_FOUND)
         get_filename_component(_alembic_library_dir ${ALEMBIC_LIBRARY} DIRECTORY)
         list(APPEND _search_dirs ${_alembic_library_dir})
         # Install Alembic explicitly for the dynamically loaded usdAbc plugin.
@@ -759,8 +812,11 @@ else()
         CODE "file(INSTALL ${INSTALL_SHARED_LIBS} DESTINATION \"${CMAKE_INSTALL_PREFIX}/lib\" FOLLOW_SYMLINK_CHAIN)")
 endif()
 
-install(
-    CODE "
+# file(GET_RUNTIME_DEPENDENCIES) resolves ELF and PE binaries; it rejects Mach-O. The macOS tree instead relies on
+# @rpath plus CMAKE_INSTALL_RPATH_USE_LINK_PATH (cmake/defaults/Platform.cmake).
+if(NOT APPLE)
+    install(
+        CODE "
 	set(_executable_targets \"${_executables}\")
 	set(_library_targets \"${_libraries}\")
 	set(_search_dirs \"${_search_dirs}\")
@@ -769,8 +825,8 @@ install(
 
     set(_excluded_install_targets )
 ")
-install(
-    CODE [=[
+    install(
+        CODE [=[
 	if (WIN32)
 		file(GET_RUNTIME_DEPENDENCIES
 									EXECUTABLES ${_executable_targets}
@@ -859,3 +915,4 @@ install(
 			TYPE SHARED_LIBRARY)
 	endif()
 ]=])
+endif()

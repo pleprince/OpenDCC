@@ -10,6 +10,9 @@ option(DCC_PYSIDE_CMAKE_FIND
        "PySide2 could be build via setup.py build or cmake. Option will look for cmake exports file" OFF)
 option(DCC_BUILD_ARNOLD_SUPPORT "" ON)
 option(DCC_BUILD_TESTS "Build C++ doctest tests and register Python unittest tests with CTest" OFF)
+# The generated dependency cache sets this off on macOS: Homebrew splits lupdate/lrelease into the qttools keg, and a
+# broken generator path would otherwise fail the build through the qm_files source entries.
+option(DCC_BUILD_I18N "Build and install Qt translations" ON)
 option(DCC_TESTS_GUI "Enable tests that launch the application GUI (requires DCC_BUILD_TESTS)" OFF)
 # needs the crashpad client libraries and headers, which only a crashpad-backend sentry-native ships
 option(DCC_BUILD_CRASH_REPORTER "Build the crash reporter" ON)

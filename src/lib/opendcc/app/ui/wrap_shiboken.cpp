@@ -20,12 +20,15 @@
 // reference them by that exact name, so they must match the PySide in use.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #define DCC_PYSIDE_PKG "PySide6"
-PyTypeObject **SbkPySide6_QtCoreTypes = NULL;
-PyTypeObject **SbkPySide6_QtGuiTypes = NULL;
-PyTypeObject **SbkPySide6_QtWidgetsTypes = NULL;
-#define DCC_SBK_QTCORE_TYPES SbkPySide6_QtCoreTypes
-#define DCC_SBK_QTGUI_TYPES SbkPySide6_QtGuiTypes
-#define DCC_SBK_QTWIDGETS_TYPES SbkPySide6_QtWidgetsTypes
+// shiboken 6 generates wrappers that reference SbkPySide6_Qt<Module>TypeStructs and expects the embedding application
+// to provide them; PySide's own Qt modules keep theirs private on macOS, where a symbol must be exported explicitly
+// to cross a dylib boundary. Defining them here is what makes the generated wrappers resolve the Qt types.
+Shiboken::Module::TypeInitStruct *SbkPySide6_QtCoreTypeStructs = nullptr;
+Shiboken::Module::TypeInitStruct *SbkPySide6_QtGuiTypeStructs = nullptr;
+Shiboken::Module::TypeInitStruct *SbkPySide6_QtWidgetsTypeStructs = nullptr;
+#define DCC_SBK_QTCORE_TYPES SbkPySide6_QtCoreTypeStructs
+#define DCC_SBK_QTGUI_TYPES SbkPySide6_QtGuiTypeStructs
+#define DCC_SBK_QTWIDGETS_TYPES SbkPySide6_QtWidgetsTypeStructs
 #else
 #define DCC_PYSIDE_PKG "PySide2"
 PyTypeObject **SbkPySide2_QtCoreTypes = NULL;

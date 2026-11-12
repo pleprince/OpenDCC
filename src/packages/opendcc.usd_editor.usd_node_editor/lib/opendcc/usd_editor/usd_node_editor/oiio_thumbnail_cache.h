@@ -6,15 +6,15 @@
 #pragma once
 
 #include <OpenImageIO/oiioversion.h>
+// Include the real header instead of forward-declaring ImageCache: with OIIO 3 the inline namespace differs between
+// the declaration the library ships and one written here, which makes every `OIIO::ImageCache` ambiguous.
+#include <OpenImageIO/imagecache.h>
 #include "opendcc/opendcc.h"
 #include "opendcc/usd_editor/usd_node_editor/api.h"
 #include "opendcc/ui/node_editor/thumbnail_cache.h"
 #include <QCache>
+#include <memory>
 #include <mutex>
-
-OIIO_NAMESPACE_BEGIN
-class ImageCache;
-OIIO_NAMESPACE_END
 
 OPENDCC_NAMESPACE_OPEN
 
@@ -33,7 +33,8 @@ public:
 private:
     QCache<QString, QImage> m_cache;
     mutable std::mutex m_mutex;
-    OIIO::ImageCache* m_oiio_cache = nullptr;
+    // OIIO 3 hands out ImageCache as a shared_ptr and no longer has a matching destroy().
+    std::shared_ptr<OIIO::ImageCache> m_oiio_cache;
 };
 
 OPENDCC_NAMESPACE_CLOSE

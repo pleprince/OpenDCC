@@ -1,0 +1,18 @@
+--- a/sources/shiboken6/cmake/ShibokenHelpers.cmake	2026-11-12 12:03:06.121820000 +0100
++++ b/sources/shiboken6/cmake/ShibokenHelpers.cmake
+@@ -78,7 +78,14 @@
+     endif()
+     if(CMAKE_HOST_UNIX AND NOT CYGWIN)
+         add_definitions(-fPIC)
+-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${gcc_warnings_options} -fvisibility=hidden")
++        # Mach-O requires an explicit export for a symbol to cross a dylib boundary: -fvisibility=hidden turns the
++        # module-level SbkPySide6_<Module>TypeStructs tables into local symbols, and every shiboken module generated
++        # outside this project that loads these typesystems then fails to bind them at load time.
++        if(CMAKE_HOST_APPLE)
++            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${gcc_warnings_options}")
++        else()
++            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${gcc_warnings_options} -fvisibility=hidden")
++        endif()
+     endif()
+     set(CMAKE_CXX_FLAGS_DEBUG "-g")
+     option(ENABLE_GCC_OPTIMIZATION "Enable specific GCC flags to optimization library \

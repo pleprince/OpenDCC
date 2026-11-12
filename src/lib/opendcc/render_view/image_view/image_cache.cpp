@@ -276,7 +276,8 @@ OIIO::ImageBuf* RenderViewInternalImageCache::acquire_image(const uint32_t key)
                 return nullptr;
             }
 
-            input->read_image(image->image_spec.format, localpixels);
+            // Explicit subimage/miplevel and chend == -1 (all channels): the shorthand overload was removed in OIIO 3.
+            input->read_image(0, 0, 0, -1, image->image_spec.format, localpixels);
             input->close();
 
             image->active = true;

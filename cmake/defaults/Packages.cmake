@@ -5,7 +5,15 @@ if(CMAKE_COMPILER_IS_GNUCC)
 endif()
 
 find_package(USD REQUIRED)
+# OSL is not an application option: it is a dependency in the spec, and the generated cache turns
+# dependencies.osl.enabled into DCC_DEPS_OSL_ENABLED.
+if(DCC_DEPS_OSL_ENABLED)
+    find_package(OSL REQUIRED)
+endif()
 if(DCC_USE_PTEX)
+    if(DEFINED DCC_DEPS_USD_FEATURE_PTEX AND NOT DCC_DEPS_USD_FEATURE_PTEX)
+        message(FATAL_ERROR "DCC_USE_PTEX=ON requires usd.features.ptex=true in the dependency spec")
+    endif()
     find_package(PTex REQUIRED)
 endif()
 
@@ -15,6 +23,16 @@ endif()
 
 find_package(doctest REQUIRED)
 find_package(TBB REQUIRED)
+
+# pxrConfig.cmake runs find_dependency(TBB CONFIG) before this, which sets TBB_FOUND and makes the local
+# cmake/modules/FindTBB.cmake return immediately, leaving TBB_INCLUDE_DIRS and TBB_LIBRARIES empty. Normalise both from
+# the imported target so every consumer sees the same variables whichever finder won.
+if(NOT TBB_INCLUDE_DIRS AND TARGET TBB::tbb)
+    get_target_property(TBB_INCLUDE_DIRS TBB::tbb INTERFACE_INCLUDE_DIRECTORIES)
+endif()
+if(NOT TBB_LIBRARIES AND TARGET TBB::tbb)
+    set(TBB_LIBRARIES TBB::tbb)
+endif()
 
 # Qt's emit macro conflicts with oneTBB; include profiling first, including in AUTOMOC output.
 if(TBB_INCLUDE_DIRS AND EXISTS "${TBB_INCLUDE_DIRS}/oneapi/tbb/profiling.h")
@@ -57,10 +75,23 @@ if(DCC_USE_PYTHON_3)
             Python3
             COMPONENTS Development Interpreter
             REQUIRED)
+        # PythonInterp/PythonLibs are deprecated and gone from CMake 4; their variables are still consumed by
+        # MakeTargets.cmake (embedding) and by DCC_PYTHON_INSTALL_SITE_PACKAGES_ROOT below.
+        set(PYTHON_EXECUTABLE
+            "${Python3_EXECUTABLE}"
+            CACHE FILEPATH "" FORCE)
+        set(PYTHON_INCLUDE_DIR
+            "${Python3_INCLUDE_DIRS}"
+            CACHE PATH "" FORCE)
+        set(PYTHON_LIBRARY
+            "${Python3_LIBRARIES}"
+            CACHE FILEPATH "" FORCE)
+        set(PYTHON_INCLUDE_DIRS "${Python3_INCLUDE_DIRS}")
+        set(PYTHON_LIBRARIES "${Python3_LIBRARIES}")
+        set(PYTHON_VERSION_MAJOR "${Python3_VERSION_MAJOR}")
+        set(PYTHON_VERSION_MINOR "${Python3_VERSION_MINOR}")
     endif()
 
-    find_package(PythonInterp 3.0 REQUIRED)
-    find_package(PythonLibs 3.0 REQUIRED)
     find_package(pybind11 REQUIRED)
 else()
     find_package(PythonInterp 2.7 REQUIRED)
@@ -72,6 +103,19 @@ if(WIN32)
 else()
     set(DCC_PYTHON_INSTALL_SITE_PACKAGES_ROOT
         ${CMAKE_INSTALL_PREFIX}/lib/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/site-packages)
+endif()
+
+# Where this interpreter keeps its extension modules, which the install tree copies next to the stdlib zip:
+# Py_SetPythonHome(<install prefix>) then finds a complete standard library. Asking the interpreter beats any hardcoded
+# layout, which differs between Homebrew, python.org and distro builds.
+if(DCC_USE_PYTHON_3 AND NOT DCC_HOUDINI_SUPPORT)
+    # Ask for the base installation: the build interpreter is a venv, whose own platstdlib holds no lib-dynload.
+    execute_process(
+        COMMAND
+            "${Python3_EXECUTABLE}" -c
+            "import sysconfig, sys; print(sysconfig.get_paths(vars={'base': sys.base_prefix, 'platbase': sys.base_prefix})['platstdlib'])"
+        OUTPUT_VARIABLE PYTHON_BASE_PLATSTDLIB_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
@@ -241,7 +285,17 @@ if(NOT _dcc_qt_core_loc)
 endif()
 get_filename_component(_dcc_qt_core_dir "${_dcc_qt_core_loc}" DIRECTORY)
 get_filename_component(DCC_QT_INSTALL_PREFIX "${_dcc_qt_core_dir}" DIRECTORY)
-message(STATUS "Qt install prefix: ${DCC_QT_INSTALL_PREFIX}")
+
+# On macOS the derivation above yields ".../QtCore.framework/Versions", which is not the Qt root every
+# ${DCC_QT_INSTALL_PREFIX}/lib use assumes. QtInstallPaths.cmake (pulled in by Qt6Config.cmake) knows the real prefix
+# and the library subdirectory.
+if(APPLE AND DEFINED QT6_INSTALL_PREFIX)
+    set(DCC_QT_INSTALL_PREFIX "${QT6_INSTALL_PREFIX}")
+    set(DCC_QT_LIB_DIR "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_LIBS}")
+else()
+    set(DCC_QT_LIB_DIR "${DCC_QT_INSTALL_PREFIX}/lib")
+endif()
+message(STATUS "Qt install prefix: ${DCC_QT_INSTALL_PREFIX} (libraries in ${DCC_QT_LIB_DIR})")
 
 # Qt6 does not populate Qt5Widgets_INCLUDE_DIRS et al, and shiboken's clang parser needs real -I paths.
 set(DCC_QT_INCLUDE_DIRS)
@@ -321,6 +375,40 @@ if(DCC_PYSIDE_CMAKE_FIND)
         find_package(Shiboken${DCC_PYSIDE_VERSION}Tools REQUIRED)
     endif()
     find_package(PySide${DCC_PYSIDE_VERSION} REQUIRED)
+    # make_shiboken_target.py substitutes PYSIDE_TYPESYSTEMS into typesystem-path; without it the load-typesystem
+    # entries in opendcc_lib.xml do not resolve and shiboken6 drops every Qt type.
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}" -c
+                "import PySide${DCC_PYSIDE_VERSION}, os; print(os.path.dirname(PySide${DCC_PYSIDE_VERSION}.__file__))"
+        OUTPUT_VARIABLE PYSIDE_PYTHONPATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(
+        COMMAND
+            "${Python3_EXECUTABLE}" -c
+            "import shiboken${DCC_PYSIDE_VERSION}, os; print(os.path.dirname(shiboken${DCC_PYSIDE_VERSION}.__file__))"
+        OUTPUT_VARIABLE SHIBOKEN_PYTHON_MODULE_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    set(PYSIDE_TYPESYSTEMS "${PYSIDE_PYTHONPATH}/typesystems")
+    set(PYSIDE_GLUE "${PYSIDE_TYPESYSTEMS}/glue")
+    set(python_include_dir "${Python3_INCLUDE_DIRS}")
+    # The PySide libraries are installed into the interpreter's site-packages, not next to the app's own libs, so the
+    # installed binaries need an rpath that reaches them.
+    if(APPLE
+       AND PYSIDE_PYTHONPATH
+       AND SHIBOKEN_PYTHON_MODULE_DIR)
+        get_filename_component(_dcc_pyside_dir_name "${PYSIDE_PYTHONPATH}" NAME)
+        get_filename_component(_dcc_shiboken_dir_name "${SHIBOKEN_PYTHON_MODULE_DIR}" NAME)
+        set(_dcc_site_packages_rpath
+            "@loader_path/../lib/python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/site-packages")
+        list(APPEND CMAKE_INSTALL_RPATH "${_dcc_site_packages_rpath}/${_dcc_pyside_dir_name}"
+             "${_dcc_site_packages_rpath}/${_dcc_shiboken_dir_name}")
+        list(REMOVE_DUPLICATES CMAKE_INSTALL_RPATH)
+    endif()
+
+    if(NOT PYSIDE_TYPESYSTEMS OR NOT EXISTS "${PYSIDE_TYPESYSTEMS}/typesystem_core.xml")
+        message(FATAL_ERROR "PySide typesystems not found under ${PYSIDE_TYPESYSTEMS}; check that "
+                            "${Python3_EXECUTABLE} imports PySide${DCC_PYSIDE_VERSION}")
+    endif()
 else()
     # PySideConfig shells out to pyside2_config.py and is Qt5 only.
     if(QT_VERSION_MAJOR GREATER_EQUAL 6)
@@ -335,8 +423,15 @@ set(DCC_SHIBOKEN_LIB_TARGET Shiboken${DCC_PYSIDE_VERSION}::libshiboken)
 set(DCC_SHIBOKEN_BIN_TARGET Shiboken${DCC_PYSIDE_VERSION}::shiboken${DCC_PYSIDE_VERSION})
 
 find_package(sentry REQUIRED)
+# The generated dependency cache sets this from the llvm keg; fall back to llvm-config on PATH.
 if(NOT DEFINED SHIBOKEN_CLANG_INSTALL_DIR)
-    message(FATAL_ERROR "SHIBOKEN_CLANG_INSTALL_DIR not found")
+    find_program(_dcc_llvm_config llvm-config)
+    if(_dcc_llvm_config)
+        get_filename_component(SHIBOKEN_CLANG_INSTALL_DIR "${_dcc_llvm_config}" DIRECTORY)
+        get_filename_component(SHIBOKEN_CLANG_INSTALL_DIR "${SHIBOKEN_CLANG_INSTALL_DIR}" DIRECTORY)
+    else()
+        message(FATAL_ERROR "SHIBOKEN_CLANG_INSTALL_DIR not found")
+    endif()
 endif()
 
 execute_process(
@@ -349,15 +444,21 @@ if(MSVC)
     add_definitions(-DOPENEXR_DLL)
 endif()
 
-find_package(OSL REQUIRED)
 find_package(OpenSubdiv REQUIRED)
 
-if(NOT ALEMBIC_FOUND AND DCC_INSTALL_ALEMBIC)
+# Alembic is discovered only through usd.features.alembic. DCC_INSTALL_ALEMBIC then decides whether the runtime is
+# copied into the install tree, so it can no longer point at a library that was never found.
+if(DCC_DEPS_USD_FEATURE_ALEMBIC)
     find_package(Alembic REQUIRED)
 endif()
 
 find_package(OpenColorIO REQUIRED)
 find_package(OpenImageIO REQUIRED)
+
+# OpenImageIO 3.x includes <fmt/args.h> and friends from its public headers. A second fmt on the include path collides
+# with the copy spdlog vendors (both then define namespace fmt in one translation unit), so route those includes to the
+# vendored copy.
+include_directories(${PROJECT_SOURCE_DIR}/src/lib/opendcc/base/vendor/fmt-shim)
 
 if(DCC_KATANA_SUPPORT)
     string(REGEX REPLACE "^([0-9]+)\.([0-9]+)\.([0-9]+)$" "\\1_\\2" OIIO_MAJOR_MINOR ${OIIO_VERSION})

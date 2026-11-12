@@ -47,7 +47,7 @@ namespace base::commands
 
     bool CommandResult::has_result() const
     {
-        return get_type_info() != typeid(nullptr);
+        return m_result_value != nullptr;
     }
 
     CommandResult::Status CommandResult::get_status() const

@@ -1,3 +1,14 @@
+# The crash reporter drives crashpad directly (CrashReportDatabase, CrashReportUploadThread), so it needs the crashpad
+# client API: headers plus the imported target. A sentry-native build without the crashpad backend, or one that does not
+# export those targets, cannot provide it.
+if(NOT TARGET sentry_crashpad::client)
+    message(
+        FATAL_ERROR
+            "DCC_BUILD_CRASH_REPORTER is ON, but this sentry-native package provides no "
+            "sentry_crashpad::client target. Disable crash_reporting in the dependency spec, or use a "
+            "sentry-native built with the crashpad backend that exports it.")
+endif()
+
 set(TARGET_NAME crash_reporter)
 
 set(BIN_NAME ${TARGET_NAME})

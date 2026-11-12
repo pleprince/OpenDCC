@@ -1,6 +1,7 @@
 // Copyright Contributors to the OpenDCC project
 // SPDX-License-Identifier: Apache-2.0
 
+#include "opendcc/app/viewport/gl_utils.h"
 #include "opendcc/usd/compositing/compositor.h"
 #include "opendcc/usd/compositing/layer.h"
 
@@ -17,7 +18,8 @@ void Compositor::add_layer(const std::shared_ptr<Layer> layer)
 
 void Compositor::composite(const int in, PXR_NS::Hgi* hgi)
 {
-    glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "Compositor");
+    if (gl_utils::debug_groups_available())
+        glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "Compositor");
 
     const auto in_value = PXR_NS::VtValue(static_cast<uint32_t>(in));
     for (const auto layer : m_layers)
@@ -56,7 +58,9 @@ void Compositor::composite(const int in, PXR_NS::Hgi* hgi)
         layer->end_render();
     }
 
-    glPopDebugGroup();
+    if (gl_utils::debug_groups_available())
+
+        glPopDebugGroup();
 }
 
 OPENDCC_NAMESPACE_CLOSE

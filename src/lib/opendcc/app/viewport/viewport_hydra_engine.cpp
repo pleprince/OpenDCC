@@ -1667,7 +1667,10 @@ GfRange3d ViewportHydraEngine::get_bbox(const SdfPath& path)
 
 bool ViewportHydraEngine::is_hd_st() const
 {
-    return m_renderer_id == HdRendererPluginRegistry::GetInstance().GetDefaultPluginId();
+    // This asks whether the engine renders through Storm, not whether Storm is USD's default delegate. Those
+    // coincided only while hdStorm was the only render delegate built: hdEmbree ships priority 99 against Storm's
+    // 0, so once it is enabled GetDefaultPluginId() returns Embree while the viewport still uses Storm.
+    return m_renderer_id == TfToken("HdStormRendererPlugin");
 }
 
 HdRenderSettingDescriptorList ViewportHydraEngine::get_render_setting_descriptors() const

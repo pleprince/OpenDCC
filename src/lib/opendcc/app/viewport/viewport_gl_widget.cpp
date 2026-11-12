@@ -1,6 +1,7 @@
 // Copyright Contributors to the OpenDCC project
 // SPDX-License-Identifier: Apache-2.0
 
+#include "opendcc/app/viewport/gl_utils.h"
 #include <pxr/pxr.h>
 #include "opendcc/base/logging/logger.h"
 #if PXR_VERSION < 2108
@@ -304,13 +305,19 @@ void ViewportGLWidget::paintGL()
     m_params.invised_paths_dirty = false;
     m_params.visibility_mask.mark_clean();
 
-    glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportColorCorrection");
-    m_color_correction->apply(m_viewport_view);
-    glPopDebugGroup();
+    const bool debug_groups = gl_utils::debug_groups_available();
 
-    glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportBackgroundDisplay");
+    if (debug_groups)
+        glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportColorCorrection");
+    m_color_correction->apply(m_viewport_view);
+    if (debug_groups)
+        glPopDebugGroup();
+
+    if (debug_groups)
+        glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportBackgroundDisplay");
     m_background_drawer->draw_display();
-    glPopDebugGroup();
+    if (debug_groups)
+        glPopDebugGroup();
 
     if (!engine->is_converged())
     {
@@ -319,19 +326,23 @@ void ViewportGLWidget::paintGL()
 
     if (auto tool = ApplicationUI::instance().get_current_viewport_tool())
     {
-        glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "CurrentViewportTool");
+        if (debug_groups)
+            glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "CurrentViewportTool");
         tool->draw(m_viewport_view, m_ui_draw_manager);
-        glPopDebugGroup();
+        if (debug_groups)
+            glPopDebugGroup();
     }
 
     if (!m_extensions.empty())
     {
-        glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportDrawExtensions");
+        if (debug_groups)
+            glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportDrawExtensions");
         for (auto& extension : m_extensions)
         {
             extension->draw(m_ui_draw_manager, m_camera_controller->get_frustum(), m_params.render_resolution[0], m_params.render_resolution[1]);
         }
-        glPopDebugGroup();
+        if (debug_groups)
+            glPopDebugGroup();
     }
 
 #if PXR_VERSION >= 2205

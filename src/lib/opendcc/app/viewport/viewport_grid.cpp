@@ -1,6 +1,7 @@
 // Copyright Contributors to the OpenDCC project
 // SPDX-License-Identifier: Apache-2.0
 
+#include "opendcc/app/viewport/gl_utils.h"
 #include "opendcc/app/viewport/viewport_grid.h"
 #if PXR_VERSION < 2108
 #include <GL/glew.h>
@@ -275,7 +276,9 @@ void ViewportGrid::draw(const GfFrustum& frustum)
     if (!m_enable)
         return;
 
-    glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportGrid");
+    if (gl_utils::debug_groups_available())
+
+        glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportGrid");
 
     GfMatrix4f proj;
     GfMatrix4f view;
@@ -334,7 +337,9 @@ void ViewportGrid::draw(const GfFrustum& frustum)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_PRIMITIVE_RESTART);
 
-    glPopDebugGroup();
+    if (gl_utils::debug_groups_available())
+
+        glPopDebugGroup();
 }
 
 void OPENDCC_NAMESPACE::ViewportGrid::set_min_step(double min_step)

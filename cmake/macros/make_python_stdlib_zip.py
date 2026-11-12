@@ -8,11 +8,14 @@ if len(sys.argv) != 2:
     sys.exit(1)
 
 python_version = str(sys.version_info[0]) + "." + str(sys.version_info[1])
+# base_prefix, not prefix: this runs with the build venv interpreter, whose prefix holds no standard library. The
+# archive is what Py_SetPythonHome(<install prefix>) reads, so it must contain encodings/ and friends.
+base_prefix = getattr(sys, "base_prefix", sys.prefix)
 if sys.platform == "win32":
-    lib_path = os.path.join(sys.prefix, "lib")
+    lib_path = os.path.join(base_prefix, "lib")
 else:
     lib_path = os.path.join(
-        sys.prefix, "lib", "python" + str(sys.version_info[0]) + "." + str(sys.version_info[1])
+        base_prefix, "lib", "python" + str(sys.version_info[0]) + "." + str(sys.version_info[1])
     )
 zf = zipfile.ZipFile(
     os.path.join(

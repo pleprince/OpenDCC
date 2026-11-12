@@ -7,11 +7,19 @@
 #include "opendcc/opendcc.h"
 #include "opendcc/base/commands_api/core/args.h"
 #include "opendcc/base/commands_api/core/command_syntax.h"
+#include <cstring>
+#include <typeinfo>
 
 OPENDCC_NAMESPACE_OPEN
 
 namespace base::commands
 {
+
+    /** Type equality that survives separate type_info objects for the same type in different images. */
+    inline bool same_type(const std::type_info& lhs, const std::type_info& rhs)
+    {
+        return lhs == rhs || std::strcmp(lhs.name(), rhs.name()) == 0;
+    }
 
     class OPENDCC_BASE_COMMANDS_API CommandResult
     {
@@ -42,7 +50,15 @@ namespace base::commands
         template <class T>
         std::shared_ptr<CommandArg<T>> get_result() const
         {
-            return std::dynamic_pointer_cast<CommandArg<T>>(m_result_value);
+            if (auto typed = std::dynamic_pointer_cast<CommandArg<T>>(m_result_value))
+                return typed;
+            // A template instantiation such as CommandArg<pybind11::object> gets its own type_info in every image
+            // that instantiates it, and macOS does not unify them, so dynamic_cast fails for a value created in
+            // another module even though the types are identical. The mangled name is unique per type, so compare
+            // that and cast statically.
+            if (m_result_value && same_type(m_result_value->get_type_info(), typeid(T)))
+                return std::static_pointer_cast<CommandArg<T>>(m_result_value);
+            return nullptr;
         }
 
         std::shared_ptr<CommandArgBase> get_result() const;
@@ -50,7 +66,7 @@ namespace base::commands
         template <class T>
         bool is_holding() const
         {
-            return get_type_info() == typeid(T);
+            return same_type(get_type_info(), typeid(T));
         }
 
     private:

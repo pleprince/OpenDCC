@@ -19,6 +19,11 @@
 #include <signal.h>
 #include <sys/stat.h>
 #define get_pid_impl() ::getpid()
+#if defined OPENDCC_OS_MAC
+#include <mach-o/dyld.h>
+#include <cstdlib>
+#include <cstring>
+#endif
 #else
 #error unknown platform
 #endif
@@ -100,6 +105,30 @@ namespace base::utils
                 size = std::numeric_limits<size_t>::max();
                 return false;
             }
+        }));
+#elif defined OPENDCC_OS_MAC
+        // macOS has no /proc: _NSGetExecutablePath reports the path the launcher used, symlinks included.
+        return std::get<0>(dynamic_alloc_read(OPENDCC_MAX_PATH, [](char* buf, size_t& size) {
+            auto required = static_cast<uint32_t>(size);
+            if (_NSGetExecutablePath(buf, &required) != 0)
+            {
+                size = required;
+                return false;
+            }
+            // Match what /proc/self/exe gives on Linux: an absolute path with no symlinks left in it.
+            char resolved[OPENDCC_MAX_PATH];
+            if (!realpath(buf, resolved))
+            {
+                return true;
+            }
+            const size_t length = std::strlen(resolved);
+            if (length >= size)
+            {
+                size = length + 1;
+                return false;
+            }
+            std::memcpy(buf, resolved, length + 1);
+            return true;
         }));
 #else
         return std::get<0>(dynamic_alloc_read(OPENDCC_MAX_PATH, [](char* buf, size_t& size) {

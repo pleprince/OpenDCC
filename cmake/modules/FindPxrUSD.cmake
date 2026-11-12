@@ -22,15 +22,35 @@ endif()
 
 find_path(
     USD_LIBRARY_DIR
-    NAMES ${PXR_LIB_PREFIX}usd${CMAKE_SHARED_LIBRARY_SUFFIX}
+    # USD 21+ splits the libraries per module (libusd_usd, libusd_pcp, ...) instead of one libusd.
+    NAMES ${PXR_LIB_PREFIX}usd${CMAKE_SHARED_LIBRARY_SUFFIX} ${PXR_LIB_PREFIX}usd_usd${CMAKE_SHARED_LIBRARY_SUFFIX}
+          ${PXR_LIB_PREFIX}usd_usd${CMAKE_STATIC_LIBRARY_SUFFIX}
     PATHS ${USD_ROOT}/lib $ENV{USD_ROOT}/lib
     DOC "USD Libraries directory")
 
+# USD 21+ installs usdGenSchema as a python module (lib/python/pxr/Usd/usdGenSchema.py) instead of a bin wrapper. Search
+# the configured USD root first and only then the ambient environment, so a pre-existing USD earlier on PATH cannot
+# shadow the pinned one.
 find_file(
     USD_GENSCHEMA_SCRIPT
     names usdGenSchema.bat usdGenSchema
     PATHS ${USD_ROOT}/bin $ENV{USD_ROOT}/bin
+    NO_DEFAULT_PATH
     DOC "USD Gen schema application")
+if(NOT USD_GENSCHEMA_SCRIPT)
+    find_file(
+        USD_GENSCHEMA_SCRIPT
+        names usdGenSchema.py
+        PATHS ${USD_ROOT}/lib/python/pxr/Usd $ENV{USD_ROOT}/lib/python/pxr/Usd
+        NO_DEFAULT_PATH
+        DOC "USD Gen schema script")
+endif()
+if(NOT USD_GENSCHEMA_SCRIPT)
+    find_file(
+        USD_GENSCHEMA_SCRIPT
+        names usdGenSchema.bat usdGenSchema usdGenSchema.py
+        DOC "USD Gen schema application")
+endif()
 
 set(_run_usd_gen_schema ${USD_GENSCHEMA_SCRIPT})
 get_filename_component(USD_GENSCHEMA_DIR ${USD_GENSCHEMA_SCRIPT} DIRECTORY)
@@ -42,7 +62,8 @@ set(USD_GENSCHEMA
 find_file(
     USD_CONFIG_FILE
     names pxrConfig.cmake
-    PATHS ${USD_ROOT} $ENV{USD_ROOT}
+    # Older USD installs put pxrConfig.cmake at the root; USD 21+ installs it under lib/cmake/pxr.
+    PATHS ${USD_ROOT} ${USD_ROOT}/lib/cmake/pxr ${USD_ROOT}/cmake $ENV{USD_ROOT} $ENV{USD_ROOT}/lib/cmake/pxr
     DOC "USD cmake configuration file")
 
 # USD Maya components

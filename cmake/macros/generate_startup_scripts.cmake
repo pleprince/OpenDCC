@@ -1,11 +1,9 @@
-
 if(WIN32)
     set(BIN_NAME dcc_base.exe)
 elseif(NOT WIN32)
     set(BIN_NAME dcc_base)
     set(SCRIPT_NAME opendcc)
 endif()
-
 
 function(gen_startup_script RENDER_DELEGATE_NAME ADDITIONAL_ENV_CONF)
     if(WIN32)
@@ -18,13 +16,18 @@ set PXR_PLUGINPATH_NAME=%~dp0/plugin/${RENDER_DELEGATE_NAME};%PXR_PLUGINPATH_NAM
 call \\\"%~dp0bin\\\\${BIN_NAME}\\\" %*\"
             )")
     elseif(NOT WIN32)
-        install(
-            CODE "file(WRITE \"${CMAKE_INSTALL_PREFIX}/${SCRIPT_NAME}.${RENDER_DELEGATE_NAME}.sh\"
-\"${ADDITIONAL_ENV_CONF}
-export PXR_PLUGINPATH_NAME=$PXR_PLUGINPATH_NAME:$(dirname $(realpath $0))/plugin/${RENDER_DELEGATE_NAME}
-cd $(dirname $(realpath $0))/bin/
-./${BIN_NAME}\"
-)")
+        # Written at configure time rather than through install(CODE): the body needs quotes and $ that would otherwise
+        # have to be escaped twice. The script also used to drop its arguments and change directory.
+        set(_delegate_script "${CMAKE_CURRENT_BINARY_DIR}/${SCRIPT_NAME}.${RENDER_DELEGATE_NAME}.sh")
+        file(
+            WRITE "${_delegate_script}"
+            "#!/bin/bash
+${ADDITIONAL_ENV_CONF}
+APP_DIR=\"\$(cd -P \"\$(dirname \"\$0\")\" && pwd)\"
+export PXR_PLUGINPATH_NAME=\"\${PXR_PLUGINPATH_NAME:+\$PXR_PLUGINPATH_NAME:}\$APP_DIR/plugin/${RENDER_DELEGATE_NAME}\"
+exec \"\$APP_DIR/bin/${BIN_NAME}\" \"\$@\"
+")
+        install(PROGRAMS "${_delegate_script}" DESTINATION "${CMAKE_INSTALL_PREFIX}")
     endif()
 endfunction()
 
@@ -35,10 +38,16 @@ if(WIN32)
 setlocal
 call \\\"%~dp0bin\\\\${BIN_NAME}\\\" %*\"
                 )")
+else()
+    # Same entry point as opendcc.bat: a launcher in the installation root that sets up the runtime environment and
+    # forwards its arguments to the application.
+    install(
+        PROGRAMS "${CMAKE_SOURCE_DIR}/cmake/macros/opendcc_launcher.sh"
+        DESTINATION "${CMAKE_INSTALL_PREFIX}"
+        RENAME opendcc)
 endif()
 
-if(DCC_BUILD_ARNOLD_SUPPORT
-   OR DCC_USD_FALLBACK_PROXY_BUILD_ARNOLD_USD)
+if(DCC_BUILD_ARNOLD_SUPPORT OR DCC_USD_FALLBACK_PROXY_BUILD_ARNOLD_USD)
     if(WIN32)
         set(ADDITIONAL_ENV_CONF
             "REM Uncomment the lines below and insert a path where Arnold is installed
@@ -54,7 +63,7 @@ REM set PATH=%ARNOLD_ROOT%\\\\bin;%PATH%")
     endif()
 endif()
 
-if(DCC_USD_FALLBACK_PROXY_BUILD_CYCLES )
+if(DCC_USD_FALLBACK_PROXY_BUILD_CYCLES)
     if(WIN32)
         set(ADDITIONAL_ENV_CONF "set PATH=%~dp0\\\\plugin\\\\cycles;%PATH%")
         gen_startup_script(cycles "${ADDITIONAL_ENV_CONF}")

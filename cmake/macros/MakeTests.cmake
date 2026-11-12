@@ -32,8 +32,16 @@ function(_opendcc_register_test TEST_NAME)
         endif()
     endforeach()
     add_test(NAME ${TEST_NAME} COMMAND ${_launcher} -- ${args_COMMAND})
-    set_tests_properties(${TEST_NAME} PROPERTIES WORKING_DIRECTORY "${_test_dir}" TIMEOUT 120 ENVIRONMENT
-                                                 "PYTHONNOUSERSITE=1;${args_ENV}")
+    set_tests_properties(
+        ${TEST_NAME}
+        PROPERTIES WORKING_DIRECTORY
+                   "${_test_dir}"
+                   TIMEOUT
+                   120
+                   ENVIRONMENT
+                   # The embedded interpreter must resolve pxr/PySide from the install tree; an ambient PYTHONPATH
+                   # (another USD build, another Python) otherwise wins and the import fails before any test runs.
+                   "PYTHONNOUSERSITE=1;PYTHONPATH=;${args_ENV}")
 endfunction()
 
 # Compile the source into its owning library and run only its named doctest suites.

@@ -1,6 +1,7 @@
 // Copyright Contributors to the OpenDCC project
 // SPDX-License-Identifier: Apache-2.0
 
+#include "opendcc/app/viewport/gl_utils.h"
 #include "opendcc/app/viewport/viewport_ui_draw_manager.h"
 #if PXR_VERSION < 2108
 #include <GL/glew.h>
@@ -337,7 +338,8 @@ void ViewportUiDrawManager::set_point_size(float point_size)
 void ViewportUiDrawManager::execute_draw_queue(unsigned width, unsigned height, uint32_t mouse_x, uint32_t mouse_y, const GfMatrix4f& proj,
                                                const GfMatrix4f& view)
 {
-    glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportUiDrawManager");
+    if (gl_utils::debug_groups_available())
+        glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportUiDrawManager");
 
     if (width != m_width || height != m_height)
         create_framebuffer(width, height);
@@ -524,7 +526,9 @@ void ViewportUiDrawManager::execute_draw_queue(unsigned width, unsigned height, 
     }
     m_gpu_data->m_render_program->release();
 
-    glPopDebugGroup();
+    if (gl_utils::debug_groups_available())
+
+        glPopDebugGroup();
 }
 
 void ViewportUiDrawManager::mesh(PrimitiveType prim_type, const std::vector<GfVec3f>& vertex_buffer)

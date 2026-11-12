@@ -1,21 +1,25 @@
 function(setup_update_translations OUT_VAR)
     set(ts_files "${CMAKE_SOURCE_DIR}/i18n/i18n.en.ts")
 
+    # Homebrew ships lupdate/lrelease in the qttools keg, not next to QtCore, and the macOS Qt root derived from the
+    # framework binary is not the install prefix. Ask the imported tool where it lives.
     set(Qt_PATH "${DCC_QT_INSTALL_PREFIX}/bin")
+    if(APPLE AND TARGET Qt${QT_VERSION_MAJOR}::lupdate)
+        get_target_property(_lupdate_loc Qt${QT_VERSION_MAJOR}::lupdate IMPORTED_LOCATION_RELEASE)
+        if(NOT _lupdate_loc)
+            get_target_property(_lupdate_loc Qt${QT_VERSION_MAJOR}::lupdate IMPORTED_LOCATION)
+        endif()
+        if(_lupdate_loc)
+            get_filename_component(_lupdate_bin_dir "${_lupdate_loc}" DIRECTORY)
+            get_filename_component(Qt_PATH "${_lupdate_bin_dir}" DIRECTORY)
+        endif()
+    endif()
 
     get_target_property(pyside_dir ${DCC_SHIBOKEN_BIN_TARGET} IMPORTED_LOCATION_RELEASE)
     if(NOT pyside_dir)
         get_target_property(pyside_dir ${DCC_SHIBOKEN_BIN_TARGET} IMPORTED_LOCATION_RELWITHDEBINFO)
     endif()
     get_filename_component(pyside_dir ${pyside_dir} DIRECTORY)
-
-    if(WIN32)
-        set(OS_ENV_SEPARATOR ";")
-        set(OS_LIBRARY_ENV_NAME "PATH")
-    else()
-        set(OS_ENV_SEPARATOR ":")
-        set(OS_LIBRARY_ENV_NAME "LD_LIBRARY_PATH")
-    endif()
 
     add_custom_target(
         update_translations
@@ -51,8 +55,8 @@ function(setup_update_translations OUT_VAR)
             LIST_DIRECTORIES false
             "${DCC_QT_INSTALL_PREFIX}/translations/qt*_${CMAKE_MATCH_1}.qm")
         set(_lang ${CMAKE_MATCH_1})
-        # install(FILES) on a missing file is a hard error, and which .qm files a Qt ships varies.
-        # Install only the catalogues this one has.
+        # install(FILES) on a missing file is a hard error, and which .qm files a Qt ships varies. Install only the
+        # catalogues this one has.
         set(_qt_qm_candidates
             "${DCC_QT_INSTALL_PREFIX}/translations/qt_${_lang}.qm"
             "${DCC_QT_INSTALL_PREFIX}/translations/qtbase_${_lang}.qm"

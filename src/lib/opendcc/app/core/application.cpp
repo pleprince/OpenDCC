@@ -392,6 +392,14 @@ void Application::initialize_extensions()
             plugin->Load();
     }
 
+    // USD resolves a render delegate by TfType name and does not load its plugin to register that type, so the
+    // delegate has to be loaded explicitly before the viewport asks for it; otherwise it reports an invalid plugin id.
+    for (auto& plugin : PlugRegistry::GetInstance().GetAllPlugins())
+    {
+        if (plugin->GetName() == "hdStorm" && !plugin->IsLoaded())
+            plugin->Load();
+    }
+
     m_package_registry->fetch_packages(true);
 }
 

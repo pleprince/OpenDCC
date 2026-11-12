@@ -1,0 +1,385 @@
+{
+  "schema": 1,
+  "platform": "macos-arm64",
+  "python": { "version": "3.12", "provider": "brew", "formula": "python@3.12" },
+  "qt": { "version": "6.12.0", "pyside": "6.12.0" },
+  "ocio": {
+    "config_version": "4.0.0",
+    "url": "https://github.com/AcademySoftwareFoundation/OpenColorIO-Config-ACES/releases/download/v4.0.0/cg-config-v4.0.0_aces-v2.0_ocio-v2.5.ocio",
+    "sha256": "9e3ec773a7fbc0bb6666e428dedd8ccec4f59b8b6d40506c825cc7a8c02ff2ff"
+  },
+  "opendcc": {
+    "tests": true,
+    "i18n": true,
+    "crash_reporter": false,
+    "render_view": true,
+    "node_editor": true,
+    "bullet_physics": true,
+    "arnold_support": false,
+    "cycles_support": false,
+    "renderman_support": false,
+    "use_ptex": false,
+    "use_houdini": false,
+    "use_katana": false
+  },
+  "dependencies": {
+    "boost": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "boost",
+      "version": "1.92.0",
+      "expect": ">=1.85",
+      "cmake_vars": { "BOOST_ROOT": "@FORMULA@" }
+    },
+    "eigen": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "eigen",
+      "version": "5.0.1",
+      "expect": ">=3.4"
+    },
+    "tbb": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "onetbb",
+      "version": "2023.2.0",
+      "expect": ">=2021",
+      "cmake_vars": { "TBB_ROOT_DIR": "@FORMULA@" }
+    },
+    "glew": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "glew",
+      "version": "2.3.1",
+      "expect": ">=2.1",
+      "cmake_vars": { "GLEW_LOCATION": "@FORMULA@" }
+    },
+    "zmq": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "zeromq",
+      "version": "4.3.5",
+      "expect": ">=4.3",
+      "cmake_vars": { "ZMQ_ROOT": "@FORMULA@" }
+    },
+    "graphviz": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "graphviz",
+      "version": "any",
+      "expect": "any",
+      "cmake_vars": { "GRAPHVIZ_ROOT": "@FORMULA@" }
+    },
+    "doctest": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "doctest",
+      "version": "2.5.3",
+      "expect": ">=2.4"
+    },
+    "openmesh": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "open-mesh",
+      "version": "11.0.0",
+      "expect": ">=9",
+      "cmake_vars": { "OPENMESH_ROOT": "@FORMULA@" }
+    },
+    "opensubdiv": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "opensubdiv",
+      "version": "3.8.0",
+      "expect": ">=3.5",
+      "cmake_vars": { "OPENSUBDIV_DIR": "@FORMULA@" }
+    },
+    "openimageio": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "openimageio",
+      "version": "3.2.2",
+      "expect": ">=2.4",
+      "cmake_vars": { "OIIO_LOCATION": "@FORMULA@" }
+    },
+    "fmt": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "fmt",
+      "version": "12.2.1",
+      "expect": ">=9"
+    },
+    "opencolorio": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "opencolorio",
+      "version": "2.6.0",
+      "expect": ">=2.2",
+      "cmake_vars": { "OCIO_LOCATION": "@FORMULA@" }
+    },
+    "imath": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "imath",
+      "version": "3.2.3",
+      "expect": ">=3.1"
+    },
+    "openexr": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "openexr",
+      "version": "3.5.3",
+      "expect": ">=3.1"
+    },
+    "sentry": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "sentry-native",
+      "version": "0.17.6",
+      "expect": ">=0.6"
+    },
+    "qtbase": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "qtbase",
+      "version": "6.12.0",
+      "expect": "==6.12"
+    },
+    "qtmultimedia": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "qtmultimedia",
+      "version": "6.12.0",
+      "expect": "==6.12"
+    },
+    "qtsvg": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "qtsvg",
+      "version": "6.12.0",
+      "expect": "==6.12"
+    },
+    "qttools": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "qttools",
+      "version": "6.12.0",
+      "expect": "==6.12"
+    },
+    "qtshadertools": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "qtshadertools",
+      "version": "6.12.0",
+      "expect": "==6.12"
+    },
+    "qtdeclarative": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "qtdeclarative",
+      "version": "6.12.0",
+      "expect": "==6.12"
+    },
+    "qtquick3d": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "qtquick3d",
+      "version": "6.12.0",
+      "expect": "==6.12"
+    },
+    "llvm": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "llvm@20",
+      "version": "20.1.8",
+      "expect": "==20",
+      "cmake_vars": { "SHIBOKEN_CLANG_INSTALL_DIR": "@FORMULA@" }
+    },
+    "python": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "python@3.12",
+      "version": "3.12.16",
+      "expect": "==3.12",
+      "cmake_vars": {
+        "PYTHON_EXECUTABLE": "@PREFIX@/venv/bin/python3",
+        "Python3_EXECUTABLE": "@PREFIX@/venv/bin/python3",
+        "Python_EXECUTABLE": "@PREFIX@/venv/bin/python3"
+      }
+    },
+    "pybind11": {
+      "enabled": true,
+      "provider": "brew",
+      "formula": "pybind11",
+      "version": "3.1.0",
+      "expect": ">=3.0"
+    },
+    "embree": {
+      "enabled": true,
+      "provider": "source",
+      "version": "3.13.5",
+      "expect": "==3.13",
+      "url": "https://github.com/RenderKit/embree/archive/refs/tags/v3.13.5.tar.gz",
+      "sha256": null,
+      "strip": 1,
+      "cmake_vars": { "EMBREE_LOCATION": "@PREFIX@" }
+    },
+    "bullet": {
+      "enabled": true,
+      "provider": "source",
+      "version": "3.25",
+      "expect": ">=3.20",
+      "url": "https://codeload.github.com/bulletphysics/bullet3/tar.gz/refs/tags/3.25",
+      "sha256": null,
+      "strip": 1,
+      "cmake_vars": { "BULLET_ROOT": "@PREFIX@" }
+    },
+    "qtads": {
+      "enabled": true,
+      "provider": "source",
+      "version": "4.4.1",
+      "expect": ">=4.0",
+      "url": "https://codeload.github.com/githubuser0xFFFF/Qt-Advanced-Docking-System/tar.gz/refs/tags/4.4.1",
+      "sha256": null,
+      "strip": 1
+    },
+    "libigl": {
+      "enabled": true,
+      "provider": "headers",
+      "version": "v2.6.0",
+      "expect": ">=2.0",
+      "url": "https://codeload.github.com/libigl/libigl/tar.gz/refs/tags/v2.6.0",
+      "sha256": null,
+      "strip": 1,
+      "cmake_vars": { "IGL_ROOT": "@PREFIX@/src/libigl" }
+    },
+    "usd": {
+      "enabled": true,
+      "provider": "source",
+      "version": "25.08",
+      "expect": ">=25.02",
+      "url": "https://codeload.github.com/PixarAnimationStudios/OpenUSD/tar.gz/refs/tags/v25.08",
+      "sha256": null,
+      "strip": 1,
+      "features": {
+        "imaging": true,
+        "usd_imaging": true,
+        "usd_tools": true,
+        "usdview": false,
+        "python": true,
+        "gl": true,
+        "metal": true,
+        "openimageio": true,
+        "opencolorio": true,
+        "hdf5": false,
+        "ptex": false,
+        "alembic": false,
+        "openvdb": false,
+        "embree": true,
+        "prman": false,
+        "materialx": true,
+        "draco": false,
+        "osl": false,
+        "tests": false,
+        "examples": false,
+        "tutorials": false
+      },
+      "cmake_vars": { "USD_ROOT": "@PREFIX@" }
+    },
+    "pyside": {
+      "enabled": true,
+      "provider": "source",
+      "version": "6.12.0",
+      "expect": "==6.12",
+      "url": "https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.12.0-src/pyside-setup-everywhere-src-6.12.0.tar.xz",
+      "sha256": "099c1a597cf33c1b000e11cf68a0b82d216fb802bf81726efc720394f10c7751",
+      "strip": 1
+    },
+    "alembic": {
+      "enabled": false,
+      "provider": "brew",
+      "formula": "alembic",
+      "version": "1.8.12",
+      "expect": ">=1.7",
+      "cmake_vars": { "Alembic_ROOT": "@FORMULA@", "ALEMBIC_DIR": "@FORMULA@" }
+    },
+    "openvdb": {
+      "enabled": false,
+      "provider": "brew",
+      "formula": "openvdb",
+      "version": "14.0.0",
+      "expect": ">=10",
+      "cmake_vars": { "OPENVDB_LOCATION": "@FORMULA@", "OPENVDB_ROOT": "@FORMULA@" }
+    },
+    "ptex": {
+      "enabled": false,
+      "provider": "brew",
+      "formula": "ptex",
+      "version": "2.5.4",
+      "expect": ">=2.3",
+      "cmake_vars": { "PTEX_LOCATION": "@FORMULA@" }
+    },
+    "hdf5": {
+      "enabled": false,
+      "provider": "brew",
+      "formula": "hdf5",
+      "version": "2.2.0",
+      "expect": ">=1.10",
+      "cmake_vars": { "HDF5_ROOT": "@FORMULA@" }
+    },
+    "partio": {
+      "enabled": false,
+      "provider": "brew",
+      "formula": "partio",
+      "version": "1.20.0",
+      "expect": ">=1.10"
+    },
+    "draco": {
+      "enabled": false,
+      "provider": "brew",
+      "formula": "draco",
+      "version": "1.5.9",
+      "expect": ">=1.4"
+    },
+    "materialx": {
+      "enabled": true,
+      "provider": "source",
+      "version": "1.39.3",
+      "expect": "==1.39",
+      "url": "https://codeload.github.com/materialx/MaterialX/tar.gz/refs/tags/v1.39.3",
+      "sha256": null,
+      "strip": 1
+    },
+    "skia": {
+      "enabled": false,
+      "provider": "manual",
+      "version": "any",
+      "expect": "any"
+    },
+    "opentimelineio": {
+      "enabled": false,
+      "provider": "manual",
+      "version": "any",
+      "expect": "any",
+      "cmake_vars": { "OpenTimelineIO_ROOT": "@MANUAL@" }
+    },
+    "arnold": {
+      "enabled": false,
+      "provider": "manual",
+      "version": "any",
+      "expect": "any"
+    },
+    "cycles": {
+      "enabled": false,
+      "provider": "manual",
+      "version": "any",
+      "expect": "any"
+    },
+    "osl": {
+      "enabled": false,
+      "provider": "manual",
+      "version": "any",
+      "expect": "any",
+      "cmake_vars": { "OSL_ROOT": "@MANUAL@" }
+    }
+  }
+}

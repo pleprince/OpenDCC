@@ -103,7 +103,48 @@ OpenDCC conforms to the [VFX Reference Platform](https://vfxplatform.com/), ensu
 
 ---
 
-### ⚙️ Building (Work in Progress)
+### ⚙️ Building
+
+#### macOS (arm64)
+
+Dependency versions and dependency features live in exactly one tracked file per platform,
+`deps/macos-arm64.json`; nothing is passed on a CMake command line. A gitignored overlay,
+`deps/macos-arm64.local.json`, overrides any part of it for one machine.
+
+```bash
+# Prerequisites: Xcode command line tools, Homebrew, cmake >= 3.21, ninja.
+python3 tools/deps/bootstrap.py            # provision everything enabled, write install_dir/deps/deps.generated.cmake
+python3 tools/deps/bootstrap.py --check     # merge + validate + report, changes nothing (exit 1 when incomplete)
+python3 tools/deps/bootstrap.py --list      # every dependency, its pin and where it comes from
+python3 tools/deps/bootstrap.py --print-config   # the merged spec CMake will be built against
+
+cmake --preset macos-arm64-release
+cmake --build --preset macos-arm64-release
+cmake --install build/macos-arm64-release
+ctest --preset macos-arm64-release --output-on-failure
+
+# launch the installed application (the POSIX counterpart of opendcc.bat)
+install_dir/macos-arm64/opendcc
+install_dir/macos-arm64/opendcc --script path/to/script.py
+```
+
+Dependencies come from a prebuilt Homebrew bottle when the keg matches the pinned version and are built from
+source into `install_dir/deps` otherwise. To change a version or switch a feature, edit the spec — or override
+it in the overlay, which `CMakeUserPresets.json` points at (see `CMakeUserPresets.json.example`):
+
+```json
+{ "dependencies": { "openvdb": { "enabled": true },
+                    "usd": { "features": { "openvdb": true } } } }
+```
+
+Re-run `bootstrap.py` afterwards. Source archives are pinned by sha256 in the tracked
+`deps/macos-arm64.lock.json` (`--update-lock` refreshes the pins); each built dependency records what it was built
+from in `install_dir/deps/stamps/<name>.json`, so editing a version or a feature rebuilds exactly that dependency.
+Configure fails with an explicit message if the spec changed since the prefix was provisioned, so a stale
+`deps.generated.cmake` cannot silently build against the wrong dependency set.
+`Linux` and `Windows` are unaffected: the generated cache is only loaded when `OPENDCC_DEPS_DIR` is set.
+
+#### Linux / Windows
 
 This section is under active development.
 

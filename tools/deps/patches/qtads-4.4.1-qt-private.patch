@@ -1,0 +1,15 @@
+--- a/src/CMakeLists.txt	2026-11-12 11:00:44.599815000 +0100
++++ b/src/CMakeLists.txt
+@@ -92,8 +92,10 @@
+                                                Qt${QT_VERSION_MAJOR}::Gui 
+                                                Qt${QT_VERSION_MAJOR}::Widgets)
+ 
+-if(QT_VERSION_MAJOR STREQUAL "6")
+-    target_link_libraries(${library_name} PRIVATE Qt6::GuiPrivate) #needed for <qpa/qplatformnativeinterface.h>
++if(QT_VERSION_MAJOR STREQUAL "6" AND TARGET Qt6::GuiPrivate)
++    # needed for <qpa/qplatformnativeinterface.h>, which only linux/FloatingWidgetTitleBar.cpp includes; a Qt
++    # without private headers (Homebrew bottles) does not provide the imported target.
++    target_link_libraries(${library_name} PRIVATE Qt6::GuiPrivate)
+ endif()
+ 
+ if (UNIX AND NOT APPLE)

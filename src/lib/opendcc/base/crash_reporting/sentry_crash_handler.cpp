@@ -102,7 +102,16 @@ namespace base::crash_reporting
 
             sentry_options_set_on_crash(
                 options,
-                [](const sentry_ucontext_t* uctx, sentry_value_t event, void* closure) {
+                [](const sentry_ucontext_t* uctx, sentry_value_t event,
+#if SENTRY_SDK_VERSION_AT_LEAST(0, 8, 0)
+                   sentry_hint_t* hint,
+#endif
+                   void* closure) {
+                    (void)uctx;
+#if SENTRY_SDK_VERSION_AT_LEAST(0, 8, 0)
+                    (void)hint;
+#endif
+                    (void)closure;
                     CrashHandler::run_crash_sender();
                     return event;
                 },

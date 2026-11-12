@@ -1,6 +1,10 @@
 if(WIN32)
     set(OS_ENV_SEPARATOR ";")
     set(OS_LIBRARY_ENV_NAME "PATH")
+elseif(APPLE)
+    set(OS_ENV_SEPARATOR ":")
+    # Mach-O uses DYLD_LIBRARY_PATH; LD_LIBRARY_PATH is ignored by dyld.
+    set(OS_LIBRARY_ENV_NAME "DYLD_LIBRARY_PATH")
 else()
     set(OS_ENV_SEPARATOR ":")
     set(OS_LIBRARY_ENV_NAME "LD_LIBRARY_PATH")
@@ -28,7 +32,7 @@ function(get_usd_env EXTRA_ENVIRONMENT USD_ENVIRONMENT_VAR)
     if(WIN32)
         list(APPEND _result "$ENV{PATH}")
     else()
-        list(APPEND _result "$ENV{LD_LIBRARY_PATH}")
+        list(APPEND _result "$ENV{${OS_LIBRARY_ENV_NAME}}")
         list(APPEND _result "$ENV{PATH}")
     endif()
     string(JOIN "${OS_ENV_SEPARATOR}" _fixed_paths ${_result})
@@ -52,9 +56,9 @@ function(
     execute_process(
         COMMAND
             ${CMAKE_COMMAND} -E env "PYTHONPATH=${USD_LIBRARY_DIR}/python${OS_ENV_SEPARATOR}$ENV{PYTHONPATH}"
-            "LD_LIBRARY_PATH=${USD_ENV}${OS_ENV_SEPARATOR}" "PATH=${USD_ENV}${OS_ENV_SEPARATOR}" "${PYTHON_EXECUTABLE}"
-            "${CMAKE_SOURCE_DIR}/cmake/macros/parse_usd_schema.py" "${USD_GENSCHEMA_SCRIPT}" "${SCHEMA_FILE}"
-            "${OUTPUT_DIR}"
+            "${OS_LIBRARY_ENV_NAME}=${USD_ENV}${OS_ENV_SEPARATOR}" "PATH=${USD_ENV}${OS_ENV_SEPARATOR}"
+            "${PYTHON_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/cmake/macros/parse_usd_schema.py" "${USD_GENSCHEMA_SCRIPT}"
+            "${SCHEMA_FILE}" "${OUTPUT_DIR}"
         RESULT_VARIABLE _exit_code
         OUTPUT_VARIABLE result
         ERROR_VARIABLE err_result ECHO_ERROR_VARIABLE)
@@ -450,16 +454,16 @@ function(opendcc_make_usd_schema TARGET_NAME)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${_output_dir}"
         COMMAND
             ${CMAKE_COMMAND} -E env "PYTHONPATH=${USD_LIBRARY_DIR}/python${OS_ENV_SEPARATOR}$ENV{PYTHONPATH}"
-            "LD_LIBRARY_PATH=${_usd_env}${OS_ENV_SEPARATOR}" "PATH=${_usd_env}${OS_ENV_SEPARATOR}"
+            "${OS_LIBRARY_ENV_NAME}=${_usd_env}${OS_ENV_SEPARATOR}" "PATH=${_usd_env}${OS_ENV_SEPARATOR}"
             "${_pxr_path_name}=${_pxr_deps}" ${_run_pre_gen_script}
         COMMAND
             ${CMAKE_COMMAND} -E env "PYTHONPATH=${USD_LIBRARY_DIR}/python${OS_ENV_SEPARATOR}$ENV{PYTHONPATH}"
-            "LD_LIBRARY_PATH=${_usd_env}${OS_ENV_SEPARATOR}" "PATH=${_usd_env}${OS_ENV_SEPARATOR}"
+            "${OS_LIBRARY_ENV_NAME}=${_usd_env}${OS_ENV_SEPARATOR}" "PATH=${_usd_env}${OS_ENV_SEPARATOR}"
             "${_pxr_path_name}=${_pxr_deps}" ${USD_GENSCHEMA} "${_schema_file}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_output_dir}/plugInfo.json ${_output_dir}/plugInfo.json.in
         COMMAND
             ${CMAKE_COMMAND} -E env "PYTHONPATH=${USD_LIBRARY_DIR}/python${OS_ENV_SEPARATOR}$ENV{PYTHONPATH}"
-            "LD_LIBRARY_PATH=${_usd_env}${OS_ENV_SEPARATOR}" "PATH=${_usd_env}${OS_ENV_SEPARATOR}"
+            "${OS_LIBRARY_ENV_NAME}=${_usd_env}${OS_ENV_SEPARATOR}" "PATH=${_usd_env}${OS_ENV_SEPARATOR}"
             "${_pxr_path_name}=${_pxr_deps}" ${_run_after_gen_script}
         COMMAND
             ${CMAKE_COMMAND} -DPLUG_INFO_ROOT=${PLUG_INFO_ROOT} -DPLUG_INFO_RESOURCE_PATH=${PLUG_INFO_RESOURCE_PATH}
@@ -477,12 +481,15 @@ function(opendcc_make_usd_schema TARGET_NAME)
 
     set_target_properties(${TARGET_NAME} PROPERTIES PUBLIC_HEADER "${_public_headers}")
 
+    # Third-party include directories are build-only: they are absolute paths into whatever prefix the dependencies live
+    # in, so exporting them would make the installed target point at a machine-local tree (and CMake rejects a prefix
+    # that sits inside the source tree).
     target_include_directories(
         ${TARGET_NAME}
-        PUBLIC ${Boost_INCLUDE_DIRS}
-               ${PYTHON_INCLUDE_DIRS}
-               ${USD_INCLUDE_DIR}
-               ${TBB_INCLUDE_DIR}
+        PUBLIC $<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>
+               $<BUILD_INTERFACE:${PYTHON_INCLUDE_DIRS}>
+               $<BUILD_INTERFACE:${USD_INCLUDE_DIR}>
+               $<BUILD_INTERFACE:${TBB_INCLUDE_DIR}>
                ${args_INCLUDE_DIRS}
                $<BUILD_INTERFACE:${_schema_sources_include_dir}>
                $<BUILD_INTERFACE:${_output_dir}>)
@@ -657,17 +664,22 @@ function(opendcc_make_shiboken_bindings TARGET_NAME)
 
     # gather include paths for generation wrap files
     get_target_property(PYSIDE_INCLUDE_DIR ${DCC_PYSIDE_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
-    set(_gen_side_config_includes
-        "${PROJECT_BINARY_DIR}/include"
-        "${PROJECT_SOURCE_DIR}/src/lib"
+    # Third-party headers are passed as system includes: shiboken refuses to extract anything it cannot model, and
+    # oneTBB's enumerable_thread_specific (reached through USD) makes it fail with "Failed to determine template
+    # parameter of ets_base<>", which aborts generation for every header that includes USD. Headers found through a
+    # system include path are skipped instead of modelled.
+    set(_shiboken_system_includes
         "${PYTHON_INCLUDE_DIR}"
-        "${PYSIDE_INCLUDE_DIR}"
-        "${DCC_QT_INCLUDE_DIRS}"
         "${PXR_INCLUDE_DIRS}"
         "${Boost_INCLUDE_DIRS}"
         "${TBB_INCLUDE_DIRS}"
         "${OIIO_INCLUDE_DIR}"
+        # OpenImageIO's headers include <fmt/format.h>; the vendored shim is the only copy that coexists with spdlog's
+        # bundled fmt, and it has to be visible to the parser.
+        "${PROJECT_SOURCE_DIR}/src/lib/opendcc/base/vendor/fmt-shim"
         "${pybind11_INCLUDE_DIRS}")
+    set(_gen_side_config_includes "${PROJECT_BINARY_DIR}/include" "${PROJECT_SOURCE_DIR}/src/lib"
+                                  "${PYSIDE_INCLUDE_DIR}" "${DCC_QT_INCLUDE_DIRS}")
 
     if(args_GEN_CONFIG_INCLUDE_DIRS)
         foreach(include_dir ${args_GEN_CONFIG_INCLUDE_DIRS})
@@ -766,13 +778,43 @@ function(opendcc_make_shiboken_bindings TARGET_NAME)
     if(WIN32)
         set(_qt_bin "${DCC_QT_INSTALL_PREFIX}/bin")
     else()
-        set(_qt_bin "${DCC_QT_INSTALL_PREFIX}/lib")
+        set(_qt_bin "${DCC_QT_LIB_DIR}")
     endif()
 
-    # Shiboken does not inherit compiler flags; include profiling before Qt's emit macro.
-    set(_shiboken_clang_args "")
+    # Shiboken inherits neither the compiler flags nor the toolchain. Both options go into one --clang-options list,
+    # because a second occurrence of the flag replaces the first: -include puts oneTBB's profiling header ahead of Qt's
+    # emit macro, and -isysroot lets shiboken's clang find the SDK's C++ headers at all.
+    set(_shiboken_clang_options "")
     if(TBB_INCLUDE_DIRS AND EXISTS "${TBB_INCLUDE_DIRS}/oneapi/tbb/profiling.h")
-        set(_shiboken_clang_args "--clang-options=-include,${TBB_INCLUDE_DIRS}/oneapi/tbb/profiling.h")
+        list(APPEND _shiboken_clang_options "-include,${TBB_INCLUDE_DIRS}/oneapi/tbb/profiling.h")
+    endif()
+    if(APPLE)
+        # shiboken parses with libclang from the LLVM keg, which does not know the SDK layout the way Apple's clang
+        # does: without -isysroot it cannot find SDK headers such as TargetConditionals.h, and every header that
+        # includes USD fails to parse. CMAKE_OSX_SYSROOT is often empty (clang's own default), so fall back to the
+        # active developer directory.
+        set(_shiboken_sysroot "${CMAKE_OSX_SYSROOT}")
+        if(NOT _shiboken_sysroot OR _shiboken_sysroot STREQUAL "macosx")
+            execute_process(
+                COMMAND xcrun --show-sdk-path
+                OUTPUT_VARIABLE _shiboken_sysroot
+                ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+        endif()
+        if(_shiboken_sysroot AND EXISTS "${_shiboken_sysroot}")
+            list(APPEND _shiboken_clang_options "-isysroot,${_shiboken_sysroot}")
+        endif()
+    endif()
+    set(_shiboken_clang_args "")
+    if(_shiboken_clang_options)
+        string(JOIN "," _shiboken_clang_option_list ${_shiboken_clang_options})
+        set(_shiboken_clang_args "--clang-options=${_shiboken_clang_option_list}")
+    endif()
+
+    set(_shiboken_system_include_args "")
+    if(_shiboken_system_includes)
+        list(REMOVE_DUPLICATES _shiboken_system_includes)
+        string(JOIN "${OS_ENV_SEPARATOR}" _shiboken_system_include_list ${_shiboken_system_includes})
+        set(_shiboken_system_include_args "--system-include-paths=${_shiboken_system_include_list}")
     endif()
 
     add_custom_command(
@@ -781,7 +823,7 @@ function(opendcc_make_shiboken_bindings TARGET_NAME)
             ${CMAKE_COMMAND} -E env
             "${OS_LIBRARY_ENV_NAME}=${_qt_bin}${OS_ENV_SEPARATOR}${SHIBOKEN_CLANG_INSTALL_DIR}/bin${OS_ENV_SEPARATOR}$ENV{${OS_LIBRARY_ENV_NAME}}"
             "${shiboken_bin}" "--output-directory=${_output_dir}/wrap" ${_shiboken_clang_args}
-            "--project-file=${_side_config_file}"
+            ${_shiboken_system_include_args} "--project-file=${_side_config_file}"
         DEPENDS ${_generator_dependencies})
 
     add_library(${TARGET_NAME} SHARED ${_headers} ${_sources} ${_generator_dependencies})

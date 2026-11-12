@@ -69,7 +69,8 @@ namespace
     class ThumbnailLoaderTask : public QRunnable
     {
     public:
-        ThumbnailLoaderTask(OIIO::ImageCache* oiio_cache, OIIOThumbnailCache* cache, const QString& file_path)
+        ThumbnailLoaderTask(const std::shared_ptr<OIIO::ImageCache>& oiio_cache, OIIOThumbnailCache* cache,
+                            const QString& file_path)
         {
             m_cache = cache;
             m_file_path = file_path;
@@ -106,7 +107,7 @@ namespace
 
         OIIOThumbnailCache* m_cache = nullptr;
         QString m_file_path;
-        OIIO::ImageCache* m_oiio_cache = nullptr;
+        std::shared_ptr<OIIO::ImageCache> m_oiio_cache;
     };
 
 };
@@ -121,7 +122,8 @@ OIIOThumbnailCache::OIIOThumbnailCache(QObject* parent)
 OIIOThumbnailCache::~OIIOThumbnailCache()
 {
     m_cache.clear();
-    OIIO::ImageCache::destroy(m_oiio_cache);
+    // The cache is a shared_ptr in OIIO 3; releasing it here is what destroy() used to do.
+    m_oiio_cache.reset();
 }
 
 bool OIIOThumbnailCache::has_image(const QString& path) const

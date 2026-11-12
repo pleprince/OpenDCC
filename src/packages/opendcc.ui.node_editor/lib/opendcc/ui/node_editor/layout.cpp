@@ -8,6 +8,12 @@
 
 #include <graphviz/gvc.h>
 #include <graphviz/cgraph.h>
+// gvc.h does not pull the version header, and gvRenderData's length type depends on the graphviz major version.
+#if defined(__has_include)
+#if __has_include(<graphviz/graphviz_version.h>)
+#include <graphviz/graphviz_version.h>
+#endif
+#endif
 #include <sstream>
 
 #include <QDir>
@@ -98,7 +104,11 @@ bool layout_items(const QVector<NodeItem*>& items, bool vertical)
 
     GVC_t* gvc = gvContext();
     char* dummy_dot;
+#if defined(GRAPHVIZ_VERSION_MAJOR) && GRAPHVIZ_VERSION_MAJOR >= 12
+    size_t dummy_length;
+#else
     uint32_t dummy_length;
+#endif
 
     gvLayout(gvc, graph, "dot");
     auto res = gvRenderData(gvc, graph, "dot", &dummy_dot, &dummy_length);

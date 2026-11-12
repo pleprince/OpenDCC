@@ -1,0 +1,22 @@
+--- a/kernels/subdiv/bezier_curve.h	2026-11-12 10:56:24.031696000 +0100
++++ b/kernels/subdiv/bezier_curve.h	2026-11-12 10:56:24.061550091 +0100
+@@ -135,7 +135,7 @@
+       }
+       
+       friend embree_ostream operator<<(embree_ostream cout, const QuadraticBezierCurve& a) {
+-        return cout << "QuadraticBezierCurve ( (" << a.u.lower << ", " << a.u.upper << "), " << a.v0 << ", " << a.v1 << ", " << a.v2 << ")";
++        return cout << "QuadraticBezierCurve (" << a.v0 << ", " << a.v1 << ", " << a.v2 << ")";
+       }
+     };
+   
+--- a/kernels/geometry/pointi.h	2026-11-12 10:56:24.032470000 +0100
++++ b/kernels/geometry/pointi.h	2026-11-12 10:56:24.061709258 +0100
+@@ -212,7 +212,7 @@
+     /*! output operator */
+     friend __forceinline embree_ostream operator<<(embree_ostream cout, const PointMi& line)
+     {
+-      return cout << "Line" << M << "i {" << line.v0 << ", " << line.geomID() << ", " << line.primID() << "}";
++      return cout << "Line" << M << "i {" << line.geomID() << ", " << line.primID() << "}";
+     }
+ 
+    public:
