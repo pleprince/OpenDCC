@@ -3,14 +3,53 @@
   "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
   "configurePresets": [
     {
+      "name": "macos-arm64-deps-base",
+      "hidden": true,
+      "displayName": "macOS arm64 dependency prefix (spec: deps/macos-arm64.cmake)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/deps",
+      "environment": {
+        "OPENDCC_DEPS_DIR": "${sourceDir}/install_dir/deps",
+        "OPENDCC_DEPS_CONFIG": "${sourceDir}/deps/macos-arm64.local.cmake"
+      },
+      "cacheVariables": {
+        "DEPS_MODE": "provision",
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    {
+      "name": "macos-arm64-deps",
+      "inherits": "macos-arm64-deps-base",
+      "displayName": "macOS arm64 dependency prefix: provision",
+      "cacheVariables": { "DEPS_MODE": "provision" }
+    },
+    {
+      "name": "macos-arm64-deps-check",
+      "inherits": "macos-arm64-deps-base",
+      "displayName": "macOS arm64 dependency prefix: check (merge, validate, report; changes nothing)",
+      "cacheVariables": { "DEPS_MODE": "check" }
+    },
+    {
+      "name": "macos-arm64-deps-list",
+      "inherits": "macos-arm64-deps-base",
+      "displayName": "macOS arm64 dependency prefix: list every dependency, its pin and where it comes from",
+      "cacheVariables": { "DEPS_MODE": "list" }
+    },
+    {
+      "name": "macos-arm64-deps-print-config",
+      "inherits": "macos-arm64-deps-base",
+      "displayName": "macOS arm64 dependency prefix: print the merged spec as JSON",
+      "cacheVariables": { "DEPS_MODE": "print-config" }
+    },
+    {
       "name": "macos-arm64-base",
       "hidden": true,
-      "displayName": "macOS arm64 (dependency prefix from deps/macos-arm64.json)",
+      "displayName": "macOS arm64 (dependency prefix from deps/macos-arm64.cmake)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "environment": {
         "OPENDCC_DEPS_DIR": "${sourceDir}/install_dir/deps",
-        "OPENDCC_DEPS_CONFIG": "${sourceDir}/deps/macos-arm64.local.json"
+        "OPENDCC_DEPS_CONFIG": "${sourceDir}/deps/macos-arm64.local.cmake"
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",

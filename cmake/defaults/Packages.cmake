@@ -375,7 +375,7 @@ if(DCC_PYSIDE_CMAKE_FIND)
         find_package(Shiboken${DCC_PYSIDE_VERSION}Tools REQUIRED)
     endif()
     find_package(PySide${DCC_PYSIDE_VERSION} REQUIRED)
-    # make_shiboken_target.py substitutes PYSIDE_TYPESYSTEMS into typesystem-path; without it the load-typesystem
+    # opendcc_write_side_config substitutes PYSIDE_TYPESYSTEMS into typesystem-path; without it the load-typesystem
     # entries in opendcc_lib.xml do not resolve and shiboken6 drops every Qt type.
     execute_process(
         COMMAND "${Python3_EXECUTABLE}" -c

@@ -108,15 +108,15 @@ OpenDCC conforms to the [VFX Reference Platform](https://vfxplatform.com/), ensu
 #### macOS (arm64)
 
 Dependency versions and dependency features live in exactly one tracked file per platform,
-`deps/macos-arm64.json`; nothing is passed on a CMake command line. A gitignored overlay,
-`deps/macos-arm64.local.json`, overrides any part of it for one machine.
+`deps/macos-arm64.cmake`; nothing is passed on a CMake command line. A gitignored overlay,
+`deps/macos-arm64.local.cmake`, overrides any part of it for one machine.
 
 ```bash
-# Prerequisites: Xcode command line tools, Homebrew, cmake >= 3.21, ninja.
-python3 tools/deps/bootstrap.py            # provision everything enabled, write install_dir/deps/deps.generated.cmake
-python3 tools/deps/bootstrap.py --check     # merge + validate + report, changes nothing (exit 1 when incomplete)
-python3 tools/deps/bootstrap.py --list      # every dependency, its pin and where it comes from
-python3 tools/deps/bootstrap.py --print-config   # the merged spec CMake will be built against
+# Prerequisites: Xcode command line tools, Homebrew, cmake >= 3.21, ninja, patch.
+cmake --preset macos-arm64-deps                # provision everything enabled, write install_dir/deps/deps.generated.cmake
+cmake --preset macos-arm64-deps-check          # merge + validate + report, changes nothing (exit 1 when incomplete)
+cmake --preset macos-arm64-deps-list           # every dependency, its pin and where it comes from
+cmake --preset macos-arm64-deps-print-config   # the merged spec CMake will be built against
 
 cmake --preset macos-arm64-release
 cmake --build --preset macos-arm64-release
@@ -130,19 +130,45 @@ install_dir/macos-arm64/opendcc --script path/to/script.py
 
 Dependencies come from a prebuilt Homebrew bottle when the keg matches the pinned version and are built from
 source into `install_dir/deps` otherwise. To change a version or switch a feature, edit the spec — or override
-it in the overlay, which `CMakeUserPresets.json` points at (see `CMakeUserPresets.json.example`):
+it in the overlay, which `CMakeUserPresets.json` points at (see `CMakeUserPresets.json.example`). The overlay
+calls the same spec functions as the base file and only states what changes; `CMAKE_VARS` and `FEATURES` merge
+per key, every other field replaces:
 
-```json
-{ "dependencies": { "openvdb": { "enabled": true },
-                    "usd": { "features": { "openvdb": true } } } }
+```cmake
+# deps/macos-arm64.local.cmake
+opendcc_deps_spec_dependency(openvdb ENABLED ON)
+opendcc_deps_spec_opendcc(USE_PTEX=ON)
+opendcc_deps_spec_dependency(usd FEATURES openvdb=ON ptex=ON)
 ```
 
-Re-run `bootstrap.py` afterwards. Source archives are pinned by sha256 in the tracked
-`deps/macos-arm64.lock.json` (`--update-lock` refreshes the pins); each built dependency records what it was built
-from in `install_dir/deps/stamps/<name>.json`, so editing a version or a feature rebuilds exactly that dependency.
+Re-run `cmake --preset macos-arm64-deps` afterwards; source dependencies are built in dependency order, so a
+fresh prefix completes in one run. Source archives are pinned by sha256 in the tracked
+`deps/macos-arm64.lock.cmake`; each built dependency records what it was built from in
+`install_dir/deps/stamps/<name>.cmake`, so editing a version or a feature rebuilds exactly that dependency.
 Configure fails with an explicit message if the spec changed since the prefix was provisioned, so a stale
 `deps.generated.cmake` cannot silently build against the wrong dependency set.
-`Linux` and `Windows` are unaffected: the generated cache is only loaded when `OPENDCC_DEPS_DIR` is set.
+
+Environment selectors, for one-off runs (never cached):
+
+| Variable | Effect |
+| ---------------------------- | ------------------------------------------------------------------------------------- |
+| `OPENDCC_DEPS_DIR` | prefix to provision (default `install_dir/deps`) |
+| `OPENDCC_DEPS_SPEC` | spec file to use (default `deps/<platform>.cmake`) |
+| `OPENDCC_DEPS_CONFIG` | overlay file to merge (default `deps/<platform>.local.cmake`) |
+| `OPENDCC_DEPS_ONLY` | comma separated subset to provision |
+| `OPENDCC_DEPS_FORCE` | comma separated subset to rebuild even when up to date (`venv` included) |
+| `OPENDCC_DEPS_JOBS` | parallel build jobs (default: core count) |
+| `OPENDCC_DEPS_UPDATE_LOCK` | `1` recomputes and records the source archive pins in the lock file |
+
+`macos-arm64-deps-print-config` writes the merged spec to stdout, but a configure pass also prints CMake's own
+status lines; pipe it through script mode when you want nothing but JSON:
+
+```bash
+cmake -DDEPS_MODE=print-config -P cmake/deps/CMakeLists.txt | python3 -m json.tool
+```
+
+`Linux` and `Windows` are unaffected: the generated cache is only loaded when `OPENDCC_DEPS_DIR` is set, and
+neither platform has a spec yet.
 
 #### Linux / Windows
 

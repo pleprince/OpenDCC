@@ -401,11 +401,24 @@ function(opendcc_make_usd_schema TARGET_NAME)
             "configure_file(\"${_output_dir}/plugInfo.json.in\" \"${CMAKE_CURRENT_BINARY_DIR}/${_schema_install_dir}/${_schema_name}/resources/plugInfo.json\" @ONLY)"
     )
 
-    # usdGenSchema currently doesn't generate plugInfo.json file if the schema.usda doesn't have classes defined as
-    # workaround, we call the python script that generates it for such cases
+    # usdGenSchema does not write a plugInfo.json when schema.usda declares no classes, so expand USD's own codegen
+    # template for that case.
     if(NOT _have_classes)
-        set(_run_pre_gen_script "${PYTHON_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/cmake/macros/generate_empty_plug_info.py"
-                                "${_schema_name}" "${_output_dir}/plugInfo.json")
+        find_file(
+            USD_PLUG_INFO_TEMPLATE
+            NAMES plugInfo.json
+            PATHS "${USD_LIBRARY_DIR}/usd/usd/resources/codegenTemplates" "${USD_ROOT}/share/usd/codegenTemplates"
+            NO_DEFAULT_PATH)
+        if(NOT USD_PLUG_INFO_TEMPLATE)
+            message(
+                FATAL_ERROR "USD's plugInfo.json codegen template was not found; looked in "
+                            "${USD_LIBRARY_DIR}/usd/usd/resources/codegenTemplates and "
+                            "${USD_ROOT}/share/usd/codegenTemplates")
+        endif()
+        set(_run_pre_gen_script
+            "${CMAKE_COMMAND}" "-DPLUG_INFO_TEMPLATE=${USD_PLUG_INFO_TEMPLATE}"
+            "-DLIBRARY_NAME=${_schema_name}" "-DOUTPUT=${_output_dir}/plugInfo.json" -P
+            "${CMAKE_SOURCE_DIR}/cmake/macros/generate_empty_plug_info.cmake")
     else()
         set(_run_pre_gen_script "${CMAKE_COMMAND}" -E true)
     endif()
@@ -596,41 +609,82 @@ function(opendcc_make_usd_schema TARGET_NAME)
 
 endfunction()
 
+# Reads a shiboken typesystem and derives everything the generated bindings need. The package attribute names the
+# python package ("opendcc.ui.node_editor._node_editor"); the namespace is always "opendcc", the trailing component
+# is the module, and the rest is the directory the wrappers land in.
 function(
-    parse_pyside_typesystem
+    opendcc_parse_typesystem
     TYPESYSTEM_FILE
+    OUTPUT_DIR
     MODULE_NAME
     SRC_PATH
     HEADERS
     SOURCES
     TYPESYSTEMS)
-    execute_process(
-        COMMAND
-            ${CMAKE_COMMAND} -E env "${PYTHON_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/cmake/macros/make_shiboken_target.py"
-            parse_typesystem -t "${TYPESYSTEM_FILE}" -o "${CMAKE_CURRENT_BINARY_DIR}/wrap"
-        RESULT_VARIABLE _exit_code
-        OUTPUT_VARIABLE result
-        ERROR_VARIABLE err_result ECHO_ERROR_VARIABLE)
-
-    if(NOT _exit_code EQUAL "0")
-        message(FATAL_ERROR "Failed to parse typesystem file. ${_exit_code} returned.\n" "${result}")
+    file(READ "${TYPESYSTEM_FILE}" _xml)
+    string(REGEX MATCH "<typesystem[^>]*package=\"[^\"]*\"" _package_element "${_xml}")
+    if(NOT _package_element)
+        message(FATAL_ERROR "${TYPESYSTEM_FILE} has no <typesystem package=\"...\"> element")
     endif()
-    string(REPLACE "\n" ";" result ${result})
+    string(REGEX REPLACE ".*package=\"([^\"]*)\".*" "\\1" _package "${_package_element}")
 
-    list(GET result 0 _module_name)
-    list(GET result 1 _src_path)
-    list(GET result 2 _headers)
-    string(REPLACE "," ";" _headers ${_headers})
-    list(GET result 3 _sources)
-    string(REPLACE "," ";" _sources ${_sources})
-    list(GET result 4 _typesystems)
-    string(REPLACE "," ";" _typesystems ${_typesystems})
+    string(REPLACE "." ";" _parts "${_package}")
+    list(LENGTH _parts _part_count)
+    if(_part_count LESS 2)
+        message(FATAL_ERROR "${TYPESYSTEM_FILE}: package \"${_package}\" is not <namespace>.<module>")
+    endif()
+    list(GET _parts -1 _module_name)
+    # Everything after the leading namespace is the subdirectory of the python package, module included: shiboken
+    # writes the wrappers next to the module it generates.
+    set(_package_path "")
+    math(EXPR _last_part "${_part_count}-1")
+    foreach(_index RANGE 1 ${_last_part})
+        list(GET _parts ${_index} _part)
+        list(APPEND _package_path "${_part}")
+    endforeach()
+
+    set(_directory "${OUTPUT_DIR}/opendcc")
+    set(_source_directory "opendcc")
+    foreach(_part IN LISTS _package_path)
+        set(_directory "${_directory}/${_part}")
+        set(_source_directory "${_source_directory}/${_part}")
+    endforeach()
+    string(REPLACE "\\" "/" _directory "${_directory}")
+    string(REPLACE "\\" "/" _source_directory "${_source_directory}")
+
+    # load-typesystem first, in document order, then every object-type followed by every value-type: that is the
+    # order shiboken's project file and the generated file list have always used.
+    set(_typesystems "")
+    string(REGEX MATCHALL "<load-typesystem[^>]*name=\"[^\"]*\"" _load_typesystems "${_xml}")
+    foreach(_element IN LISTS _load_typesystems)
+        string(REGEX REPLACE ".*name=\"([^\"]*)\".*" "\\1" _type_system "${_element}")
+        list(APPEND _typesystems "${_type_system}")
+    endforeach()
+    set(_type_names "")
+    foreach(_element_name object-type value-type)
+        string(REGEX MATCHALL "<${_element_name}[^>]*name=\"[^\"]*\"" _elements "${_xml}")
+        foreach(_element IN LISTS _elements)
+            string(REGEX REPLACE ".*name=\"([^\"]*)\".*" "\\1" _type_name "${_element}")
+            list(APPEND _type_names "${_type_name}")
+        endforeach()
+    endforeach()
+
+    set(_headers "")
+    set(_sources "")
+    foreach(_type_name IN LISTS _type_names)
+        string(TOLOWER "${_type_name}" _type_slug)
+        list(APPEND _headers "${_directory}/opendcc_${_type_slug}_wrapper.h")
+        list(APPEND _sources "${_directory}/opendcc_${_type_slug}_wrapper.cpp")
+    endforeach()
+    string(REPLACE ";" "_" _package_slug "${_package_path}")
+    list(APPEND _headers "${_directory}/opendcc_${_package_slug}_python.h")
+    list(APPEND _sources "${_directory}/${_module_name}_module_wrapper.cpp")
 
     set(${MODULE_NAME}
         ${_module_name}
         PARENT_SCOPE)
     set(${SRC_PATH}
-        ${_src_path}
+        ${_source_directory}
         PARENT_SCOPE)
     set(${HEADERS}
         ${_headers}
@@ -641,6 +695,47 @@ function(
     set(${TYPESYSTEMS}
         ${_typesystems}
         PARENT_SCOPE)
+endfunction()
+
+# Writes the shiboken project template (side_config.txt.in) that configure_file then fills in for one target.
+# EXTRA is the shiboken warning mode: "silent" or "no-suppress-warnings".
+function(opendcc_write_side_config OUTPUT_DIR INCLUDE_PATHS TYPESYSTEM_PATHS EXTRA)
+    set(_include_lines "")
+    foreach(_include_path IN LISTS INCLUDE_PATHS)
+        if(NOT _include_path STREQUAL "")
+            list(APPEND _include_lines "include-path = ${_include_path}")
+        endif()
+    endforeach()
+    set(_typesystem_lines "")
+    foreach(_typesystem_path IN LISTS TYPESYSTEM_PATHS)
+        if(NOT _typesystem_path STREQUAL "")
+            list(APPEND _typesystem_lines "typesystem-path = ${_typesystem_path}")
+        endif()
+    endforeach()
+    string(JOIN "\n" _include_text ${_include_lines})
+    string(JOIN "\n" _typesystem_text ${_typesystem_lines})
+
+    file(
+        WRITE "${OUTPUT_DIR}/side_config.txt.in"
+        "[generator-project]\n"
+        "\n"
+        "generator-set = shiboken\n"
+        "enable-pyside-extensions\n"
+        "enable-parent-ctor-heuristic\n"
+        "enable-return-value-heuristic\n"
+        "avoid-protected-hack\n"
+        "use-isnull-as-nb_nonzero\n"
+        "debug-level = full\n"
+        "\n"
+        "${EXTRA}\n"
+        "\n"
+        "header-file = @HEADER_FILE_PATH@\n"
+        "typesystem-file = @TYPESYSTEM_FILE_PATH@\n"
+        "language-level = c++@CMAKE_CXX_STANDARD@\n"
+        "${_include_text}\n"
+        "typesystem-path = @PYSIDE_TYPESYSTEMS@\n"
+        "${_typesystem_text}\n"
+        "framework-include-path = @DCC_QT_INSTALL_PREFIX@/lib\n")
 endfunction()
 
 function(opendcc_make_shiboken_bindings TARGET_NAME)
@@ -694,8 +789,9 @@ function(opendcc_make_shiboken_bindings TARGET_NAME)
     else()
         set(_shiboken_header_filepath "${args_SOURCE_DIR}/${args_TARGET}.h")
     endif()
-    parse_pyside_typesystem("${CMAKE_CURRENT_SOURCE_DIR}/${_typesystem_filepath}" _module_name _src_path _headers
-                            _sources _dependent_typesystems)
+    opendcc_parse_typesystem("${CMAKE_CURRENT_SOURCE_DIR}/${_typesystem_filepath}"
+                             "${CMAKE_CURRENT_BINARY_DIR}/wrap" _module_name _src_path _headers _sources
+                             _dependent_typesystems)
     if(args_VERBOSE)
         message(STATUS "    Parsed ${_typesystem_filepath}:")
         message(STATUS "        Module name: ${_module_name}")
@@ -745,25 +841,10 @@ function(opendcc_make_shiboken_bindings TARGET_NAME)
             set(_verbose "silent")
         endif()
 
-        if(_typesystem_paths)
-            set(_typesystem_paths_arg "-t" ${_typesystem_paths})
-        else()
-            set(_typesystem_paths_arg "")
-        endif()
-
-        execute_process(
-            COMMAND
-                ${CMAKE_COMMAND} -E env "${PYTHON_EXECUTABLE}"
-                "${CMAKE_SOURCE_DIR}/cmake/macros/make_shiboken_target.py" make_side_config -o
-                "${CMAKE_CURRENT_BINARY_DIR}" ${_verbose} "-i" ${_gen_side_config_includes} ${_typesystem_paths_arg}
-            RESULT_VARIABLE _exit_code
-            OUTPUT_VARIABLE result
-            ERROR_VARIABLE err_result ECHO_ERROR_VARIABLE)
-
-        if(NOT _exit_code EQUAL "0")
-            message(FATAL_ERROR "Failed to generate side_config.txt.in file. ${_exit_code} returned.\n" "${result}")
-        elseif(args_VERBOSE)
-            message(STATUS ${result})
+        opendcc_write_side_config("${CMAKE_CURRENT_BINARY_DIR}" "${_gen_side_config_includes}" "${_typesystem_paths}"
+                                  "${_verbose}")
+        if(args_VERBOSE)
+            message(STATUS "    Wrote ${CMAKE_CURRENT_BINARY_DIR}/side_config.txt.in")
         endif()
 
         set(TYPESYSTEM_FILE_PATH "${_typesystem_generated}")

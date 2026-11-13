@@ -1,5 +1,5 @@
 function(setup_update_translations OUT_VAR)
-    set(ts_files "${CMAKE_SOURCE_DIR}/i18n/i18n.en.ts")
+    set(_i18n_dir "${CMAKE_SOURCE_DIR}/i18n")
 
     # Homebrew ships lupdate/lrelease in the qttools keg, not next to QtCore, and the macOS Qt root derived from the
     # framework binary is not the install prefix. Ask the imported tool where it lives.
@@ -21,30 +21,59 @@ function(setup_update_translations OUT_VAR)
     endif()
     get_filename_component(pyside_dir ${pyside_dir} DIRECTORY)
 
-    add_custom_target(
-        update_translations
-        DEPENDS "${CMAKE_SOURCE_DIR}/cmake/macros/make_i18n.py"
-        COMMAND
-            ${CMAKE_COMMAND} -E env
-            "${OS_LIBRARY_ENV_NAME}=${Qt_PATH}${OS_ENV_SEPARATOR}${pyside_dir}${OS_ENV_SEPARATOR}$ENV{${OS_LIBRARY_ENV_NAME}}"
-            "${PYTHON_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/cmake/macros/make_i18n.py" make_ts --src_dir
-            "${CMAKE_SOURCE_DIR}/src" --output_dir "${CMAKE_SOURCE_DIR}/i18n" --qt_path "${DCC_QT_INSTALL_PREFIX}"
-            --lang ${DCC_LANG})
+    # The tool wrappers need the Qt and PySide binaries on the library path; both live outside the install prefix.
+    set(_tool_environment
+        "${OS_LIBRARY_ENV_NAME}=${Qt_PATH}${OS_ENV_SEPARATOR}${pyside_dir}${OS_ENV_SEPARATOR}$ENV{${OS_LIBRARY_ENV_NAME}}")
 
-    if(${DCC_LANG} STREQUAL "all")
-        set(qm_files "${CMAKE_CURRENT_BINARY_DIR}/i18n/i18n.en.qm")
+    # DCC_LANG=all maintains every catalogue but ships the English one, which is what the application falls back to.
+    if(DCC_LANG STREQUAL "all")
+        set(_maintained_langs ru en)
+        set(_built_langs en)
     else()
-        set(qm_files "${CMAKE_CURRENT_BINARY_DIR}/i18n/i18n.${DCC_LANG}.qm")
+        set(_maintained_langs "${DCC_LANG}")
+        set(_built_langs "${DCC_LANG}")
     endif()
 
-    add_custom_command(
-        OUTPUT ${qm_files}
-        DEPENDS ${ts_files} "${CMAKE_SOURCE_DIR}/cmake/macros/make_i18n.py"
+    set(ts_files "")
+    foreach(_lang IN LISTS _maintained_langs)
+        list(APPEND ts_files "${_i18n_dir}/i18n.${_lang}.ts")
+    endforeach()
+    # One lupdate run covers every maintained catalogue: it takes one -ts output per language.
+    add_custom_target(
+        update_translations
         COMMAND
-            ${CMAKE_COMMAND} -E env
-            "${OS_LIBRARY_ENV_NAME}=${Qt_PATH}${OS_ENV_SEPARATOR}${pyside_dir}${OS_ENV_SEPARATOR}$ENV{${OS_LIBRARY_ENV_NAME}}"
-            "${PYTHON_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/cmake/macros/make_i18n.py" make_qm --qt_path
-            "${DCC_QT_INSTALL_PREFIX}" --inputs ${ts_files} --output_dir "${CMAKE_CURRENT_BINARY_DIR}/i18n")
+            ${CMAKE_COMMAND} -E env "${_tool_environment}" "${Qt_PATH}/bin/lupdate" -extensions
+            "h,hpp,c,cpp,c++,cxx,py" "${CMAKE_SOURCE_DIR}/src" -tr-function-alias "translate+=i18n" -ts ${ts_files}
+    )
+
+    # QTranslator fails a whole catalogue if one of its declared dependencies is missing, so Qt's own translations
+    # are chained in through a loader catalogue only when that .qm exists. The loader is written at configure time
+    # and kept: it is a build input, so removing it after lrelease would leave the next build without the chain.
+    set(qm_files "")
+    foreach(_lang IN LISTS _built_langs)
+        set(_ts_file "${_i18n_dir}/i18n.${_lang}.ts")
+        set(_qm_file "${CMAKE_CURRENT_BINARY_DIR}/i18n/i18n.${_lang}.qm")
+        set(_lrelease_inputs "${_ts_file}")
+        if(EXISTS "${DCC_QT_INSTALL_PREFIX}/translations/qt_${_lang}.qm")
+            set(_loader_file "${CMAKE_CURRENT_BINARY_DIR}/i18n/loader.${_lang}.ts")
+            file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/i18n")
+            file(WRITE "${_loader_file}"
+                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                 "<!DOCTYPE TS>\n"
+                 "<TS version=\"2.1\" language=\"${_lang}\">\n"
+                 "    <dependencies>\n"
+                 "        <dependency catalog=\"qt_${_lang}\"/>\n"
+                 "    </dependencies>\n"
+                 "</TS>\n")
+            list(APPEND _lrelease_inputs "${_loader_file}")
+        endif()
+        add_custom_command(
+            OUTPUT "${_qm_file}"
+            DEPENDS ${_lrelease_inputs}
+            COMMAND ${CMAKE_COMMAND} -E env "${_tool_environment}" "${DCC_QT_INSTALL_PREFIX}/bin/lrelease"
+                    ${_lrelease_inputs} -qm "${_qm_file}")
+        list(APPEND qm_files "${_qm_file}")
+    endforeach()
 
     install(FILES ${qm_files} DESTINATION i18n)
 

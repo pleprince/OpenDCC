@@ -33,13 +33,21 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 project(OpenDCC VERSION 0.4.0.0)
 
-# The dependency prefix is provisioned by tools/deps/bootstrap.py from deps/<platform>.json, which is the only place
-# versions and features are declared. That driver writes deps.generated.cmake; nothing else is consumed here. Linux and
-# Windows never set OPENDCC_DEPS_DIR and are unaffected.
+# Provisioning mode. The dependency prefix is built by cmake/deps from deps/<platform>.cmake, which is the only
+# place versions and features are declared; that driver writes deps.generated.cmake, and nothing else is consumed
+# here. The <platform>-deps presets set DEPS_MODE to one of provision|check|list|print-config; a normal configure
+# leaves it empty. Linux and Windows never set OPENDCC_DEPS_DIR and are unaffected.
+set(DEPS_MODE
+    ""
+    CACHE STRING "Provision the dependency prefix instead of configuring OpenDCC (provision|check|list|print-config)")
+if(DEPS_MODE)
+    add_subdirectory(cmake/deps)
+    return()
+endif()
+
 if(DEFINED ENV{OPENDCC_DEPS_DIR})
     if(NOT EXISTS "$ENV{OPENDCC_DEPS_DIR}/deps.generated.cmake")
-        message(FATAL_ERROR "Dependency prefix not provisioned. Run:\n"
-                            "  python3 tools/deps/bootstrap.py --prefix $ENV{OPENDCC_DEPS_DIR}")
+        message(FATAL_ERROR "Dependency prefix not provisioned. Run:\n" "  cmake --preset macos-arm64-deps")
     endif()
     include("$ENV{OPENDCC_DEPS_DIR}/deps.generated.cmake")
     message(STATUS "Using dependency prefix: ${DCC_DEPS_PREFIX}")
@@ -55,10 +63,10 @@ if(DEFINED ENV{OPENDCC_DEPS_DIR})
             set(_deps_provisioned_overlay "(no overlay)")
         endif()
         message(FATAL_ERROR "OPENDCC_DEPS_CONFIG is $ENV{OPENDCC_DEPS_CONFIG} but the prefix was provisioned "
-                            "from ${_deps_provisioned_overlay}. Re-run tools/deps/bootstrap.py.")
+                            "from ${_deps_provisioned_overlay}. Re-run cmake --preset macos-arm64-deps.")
     endif()
 
-    # The cache is only valid for the spec it was generated from; bootstrap.py hashes the same fields.
+    # The cache is only valid for the spec it was generated from; the driver hashes the same fields.
     set(_deps_token "")
     foreach(_deps_spec_file "${DCC_DEPS_SPEC_FILE}" "${DCC_DEPS_OVERLAY_FILE}")
         if(_deps_spec_file AND EXISTS "${_deps_spec_file}")
@@ -69,7 +77,7 @@ if(DEFINED ENV{OPENDCC_DEPS_DIR})
     endforeach()
     string(SHA256 _deps_token "${_deps_token}")
     if(NOT _deps_token STREQUAL "${DCC_DEPS_SPEC_TOKEN}")
-        message(FATAL_ERROR "Dependency spec changed since provisioning. Run:\n" "  python3 tools/deps/bootstrap.py")
+        message(FATAL_ERROR "Dependency spec changed since provisioning. Run:\n" "  cmake --preset macos-arm64-deps")
     endif()
 endif()
 

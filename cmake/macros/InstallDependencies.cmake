@@ -265,7 +265,7 @@ if(DCC_INSTALL_PYTHON)
         install(FILES ${PYTHON_EMBED_ARCHIVE} DESTINATION ${PYTHON_EMBED_ARCHIVE_DEST})
     else()
         install(
-            CODE "execute_process(COMMAND \"${PYTHON_EXECUTABLE}\" \"${PROJECT_SOURCE_DIR}/cmake/macros/make_python_stdlib_zip.py\" \"${PYTHON_EMBED_ARCHIVE_DEST}\")"
+            CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" \"-DPYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}\" \"-DOUTPUT_DIR=${PYTHON_EMBED_ARCHIVE_DEST}\" -P \"${PROJECT_SOURCE_DIR}/cmake/macros/make_python_stdlib_zip.cmake\")"
         )
     endif()
 endif()

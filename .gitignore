@@ -4,5 +4,5 @@ install_dir
 *.pyc
 ccache
 CMakeUserPresets.json
-deps/*.local.json
+deps/*.local.cmake
 __pycache__
