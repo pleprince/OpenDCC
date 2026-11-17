@@ -279,6 +279,27 @@ function(opendcc_deps_version_matches out pin installed)
     set(${out} ON PARENT_SCOPE)
 endfunction()
 
+# True when <installed> is at least <floor>. A version pxrConfig records for a library it links is a minimum
+# (`find_dependency(TBB 2020.3 CONFIG)`), unlike the exact pins the spec uses for kegs.
+function(opendcc_deps_version_at_least out installed floor)
+    if("${floor}" STREQUAL "" OR "${floor}" STREQUAL "any")
+        set(${out} ON PARENT_SCOPE)
+        return()
+    endif()
+    if("${installed}" STREQUAL "" OR "${installed}" STREQUAL "any")
+        set(${out} OFF PARENT_SCOPE)
+        return()
+    endif()
+    opendcc_deps_version_split(_installed_parts "${installed}")
+    opendcc_deps_version_split(_floor_parts "${floor}")
+    opendcc_deps_version_cmp(_order "${_installed_parts}" "${_floor_parts}")
+    if(_order LESS 0)
+        set(${out} OFF PARENT_SCOPE)
+    else()
+        set(${out} ON PARENT_SCOPE)
+    endif()
+endfunction()
+
 # Range check against an "expect" field; reports the unsupported-range problem instead of dying so the caller can
 # collect it.
 function(opendcc_deps_satisfies out_ok out_error expect version)
@@ -323,6 +344,6 @@ function(opendcc_deps_drift_message out name installed pin overlay_file)
     endif()
     opendcc_deps_rel(_where "${overlay_file}")
     set(${out}
-        "${name} is ${_shown}, spec expects ${pin}; add {\"${name}\": {\"version\": \"${_suggested}\"}} to ${_where}"
-        PARENT_SCOPE)
+        "${name} is ${_shown}, spec expects ${pin}; set opendcc_deps_spec_dependency(${name} VERSION ${_suggested}) "
+        "in ${_where}" PARENT_SCOPE)
 endfunction()

@@ -884,6 +884,11 @@ function(opendcc_make_shiboken_bindings TARGET_NAME)
         if(_shiboken_sysroot AND EXISTS "${_shiboken_sysroot}")
             list(APPEND _shiboken_clang_options "-isysroot,${_shiboken_sysroot}")
         endif()
+        # libclang from the LLVM keg takes its builtin headers from the active Xcode toolchain, and a toolchain newer
+        # than that libclang makes arm's intrinsics header unparseable ("incompatible constant for this
+        # __builtin_neon function"), which aborts the parse as soon as a system header reaches OIIO's SIMD path. The
+        # bindings model no vector types, so the parse opts out of it instead of requiring a matching LLVM.
+        list(APPEND _shiboken_clang_options "-DOIIO_NO_NEON")
     endif()
     set(_shiboken_clang_args "")
     if(_shiboken_clang_options)

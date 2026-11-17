@@ -460,6 +460,17 @@ find_package(OpenImageIO REQUIRED)
 # vendored copy.
 include_directories(${PROJECT_SOURCE_DIR}/src/lib/opendcc/base/vendor/fmt-shim)
 
+# The include roots of the dependencies this build provisions, as system includes. A library's own include
+# directories — what an imported target exports, which is where USD's include directory comes from — are searched
+# after this directory's, so a dependency whose install tree happens to carry another dependency's headers would
+# otherwise decide which headers every translation unit sees: an external USD ships its own OpenImageIO, Imath,
+# OpenEXR, OpenColorIO and TBB, and compiling against those while linking the copies the spec provisions is how a
+# source-level mismatch (OIIO 2.5 headers, OIIO 3.2 library) gets built. The deps driver writes the list; it is
+# absent for builds that do not use a prefix, and the shim above deliberately stays in front of it.
+if(DCC_DEPS_INCLUDE_DIRS)
+    include_directories(SYSTEM ${DCC_DEPS_INCLUDE_DIRS})
+endif()
+
 if(DCC_KATANA_SUPPORT)
     string(REGEX REPLACE "^([0-9]+)\.([0-9]+)\.([0-9]+)$" "\\1_\\2" OIIO_MAJOR_MINOR ${OIIO_VERSION})
     string(REGEX REPLACE "^([0-9]+)\.([0-9]+)\.([0-9]+)$" "\\1_\\2" OCIO_MAJOR_MINOR ${OCIO_VERSION})

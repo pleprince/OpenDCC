@@ -26,6 +26,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/DepsSpec.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/DepsPlatform.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/DepsGenerate.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/DepsRecipes.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/DepsAlign.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/DepsProviders.cmake")
 
 opendcc_deps_platform_tag(DEPS_PLATFORM_TAG)
@@ -67,9 +68,17 @@ opendcc_deps_lock_load("${DEPS_LOCK_FILE}")
 
 opendcc_deps_spec_reset()
 include("${DEPS_SPEC_FILE}")
+# What this platform provisions each dependency with, before an overlay can point it somewhere else: the fallback for
+# an external dependency that turns out to be unavailable.
+opendcc_deps_record_base_providers()
 if(EXISTS "${DEPS_OVERLAY_FILE}")
     include("${DEPS_OVERLAY_FILE}")
 endif()
+
+# An external dependency defines the versions this build must use; adopting them before validation means everything
+# below (provisioning, the generated cache, the application build) describes that installation. One that is not
+# installed is provisioned with the provider the platform declared for it instead of failing.
+opendcc_deps_prepare_external_specs()
 
 opendcc_deps_spec_validate(_spec_problems)
 if(NOT "${_spec_problems}" STREQUAL "")

@@ -10,7 +10,7 @@
 #   DEPS_SPEC_QT_VERSION|QT_PYSIDE                             top-level qt block
 #   DEPS_SPEC_OCIO_DECLARED|OCIO_CONFIG_VERSION|OCIO_URL|OCIO_SHA256
 #   DEPS_SPEC_OPENDCC_<KEY>                                    one per opendcc key
-#   DEPS_DECL_<KEY>_DECLARED|ENABLED|PROVIDER|FORMULA|VERSION|EXPECT|URL|SHA256|STRIP|CMAKE_VARS|FEATURES
+#   DEPS_DECL_<KEY>_DECLARED|ENABLED|PROVIDER|FORMULA|VERSION|EXPECT|URL|SHA256|STRIP|PREFIX|CMAKE_VARS|FEATURES
 #
 # <KEY> is the dependency name upper-cased with '-' replaced by '_' (opendcc_deps_key). CMAKE_VARS and FEATURES
 # are lists of VAR=VALUE / feature=ON|OFF entries, merged per key so an overlay may restate a single entry.
@@ -87,7 +87,9 @@ set(DEPS_USD_FEATURES
     examples
     tutorials)
 
-set(DEPS_PROVIDERS brew source headers manual)
+# `external` means "already installed elsewhere": the spec names its PREFIX and the driver verifies it instead of
+# building anything.
+set(DEPS_PROVIDERS brew source headers manual external)
 
 # spec key -> generated CMake option (1:1, no other mapping).
 set(DEPS_OPENDCC_KEYS
@@ -203,6 +205,10 @@ function(opendcc_deps_spec_reset)
         set(DEPS_DECL_${_key}_SHA256 ""
             PARENT_SCOPE)
         set(DEPS_DECL_${_key}_STRIP 1
+            PARENT_SCOPE)
+        set(DEPS_DECL_${_key}_PREFIX ""
+            PARENT_SCOPE)
+        set(DEPS_DECL_${_key}_ALIGN ""
             PARENT_SCOPE)
         set(DEPS_DECL_${_key}_CMAKE_VARS ""
             PARENT_SCOPE)
@@ -324,15 +330,18 @@ function(opendcc_deps_merge_kv out existing new)
     set(${out} "${_result}" PARENT_SCOPE)
 endfunction()
 
-# opendcc_deps_spec_dependency(<name> [ENABLED ON|OFF] [PROVIDER brew|source|headers|manual] [FORMULA <f>]
-#     [VERSION <v>] [EXPECT <range>] [URL <u>] [SHA256 <hash>] [STRIP <n>] [CMAKE_VARS <VAR=VALUE>...]
-#     [FEATURES <usd-feature=ON|OFF>...])
+# opendcc_deps_spec_dependency(<name> [ENABLED ON|OFF] [PROVIDER brew|source|headers|manual|external]
+#     [FORMULA <f>] [VERSION <v>] [EXPECT <range>] [URL <u>] [SHA256 <hash>] [STRIP <n>] [PREFIX <dir>]
+#     [ALIGN ON|OFF] [CMAKE_VARS <VAR=VALUE>...] [FEATURES <usd-feature=ON|OFF>...])
 #
 # Called again for the same dependency (from the overlay) it replaces exactly the fields it states; CMAKE_VARS and
-# FEATURES merge per key.
+# FEATURES merge per key. PREFIX is only meaningful with PROVIDER external: it is the absolute install prefix the
+# dependency was built into. ALIGN (default ON, external only) adopts what that installation reports — its release,
+# its dependency pins, its feature set — instead of demanding the spec match; ALIGN OFF verifies the spec against it.
 function(opendcc_deps_spec_dependency name)
-    cmake_parse_arguments(PARSE_ARGV 1 arg "" "ENABLED;PROVIDER;FORMULA;VERSION;EXPECT;URL;SHA256;STRIP"
-                                               "CMAKE_VARS;FEATURES")
+    cmake_parse_arguments(PARSE_ARGV 1 arg ""
+                          "ENABLED;PROVIDER;FORMULA;VERSION;EXPECT;URL;SHA256;STRIP;PREFIX;ALIGN"
+                          "CMAKE_VARS;FEATURES")
     if(NOT "${name}" IN_LIST DEPS_KNOWN_DEPENDENCIES)
         opendcc_deps_die("opendcc_deps_spec_dependency: unknown dependency \"${name}\"; known: "
                          "${DEPS_KNOWN_DEPENDENCIES}")
@@ -341,11 +350,15 @@ function(opendcc_deps_spec_dependency name)
     if(arg_UNPARSED_ARGUMENTS)
         string(REPLACE ";" ", " _unparsed "${arg_UNPARSED_ARGUMENTS}")
         opendcc_deps_die("opendcc_deps_spec_dependency(${name}): unknown argument \"${_unparsed}\"; known: "
-                         "ENABLED, PROVIDER, FORMULA, VERSION, EXPECT, URL, SHA256, STRIP, CMAKE_VARS, FEATURES")
+                         "ENABLED, PROVIDER, FORMULA, VERSION, EXPECT, URL, SHA256, STRIP, PREFIX, ALIGN, "
+                         "CMAKE_VARS, FEATURES")
     endif()
     if(DEFINED arg_ENABLED AND NOT "${arg_ENABLED}" STREQUAL "ON" AND NOT "${arg_ENABLED}" STREQUAL "OFF")
         opendcc_deps_die("opendcc_deps_spec_dependency(${name}): ENABLED must be ON or OFF, found "
                          "\"${arg_ENABLED}\"")
+    endif()
+    if(DEFINED arg_ALIGN AND NOT "${arg_ALIGN}" STREQUAL "ON" AND NOT "${arg_ALIGN}" STREQUAL "OFF")
+        opendcc_deps_die("opendcc_deps_spec_dependency(${name}): ALIGN must be ON or OFF, found \"${arg_ALIGN}\"")
     endif()
     if(DEFINED arg_PROVIDER AND NOT "${arg_PROVIDER}" IN_LIST DEPS_PROVIDERS)
         opendcc_deps_die("opendcc_deps_spec_dependency(${name}): PROVIDER must be one of ${DEPS_PROVIDERS}, found "
@@ -386,7 +399,7 @@ function(opendcc_deps_spec_dependency name)
 
     set(DEPS_DECL_${_key}_DECLARED ON
         PARENT_SCOPE)
-    foreach(_field ENABLED PROVIDER FORMULA VERSION EXPECT URL SHA256 STRIP)
+    foreach(_field ENABLED PROVIDER FORMULA VERSION EXPECT URL SHA256 STRIP PREFIX ALIGN)
         if(DEFINED arg_${_field})
             set(DEPS_DECL_${_key}_${_field} "${arg_${_field}}"
                 PARENT_SCOPE)
@@ -414,6 +427,30 @@ function(opendcc_deps_dep_enabled out name)
     else()
         set(${out} OFF PARENT_SCOPE)
     endif()
+endfunction()
+
+# Whether an external dependency's own versions replace the spec's (default) or are checked against it.
+function(opendcc_deps_dep_align out name)
+    opendcc_deps_decl(_align "${name}" ALIGN)
+    if("${_align}" STREQUAL "OFF")
+        set(${out} OFF PARENT_SCOPE)
+    else()
+        set(${out} ON PARENT_SCOPE)
+    endif()
+endfunction()
+
+# The provider each dependency has before the overlay runs: what this platform actually knows how to provision. An
+# external dependency that turns out to be unavailable falls back to it.
+function(opendcc_deps_record_base_providers)
+    foreach(_name IN LISTS DEPS_KNOWN_DEPENDENCIES)
+        opendcc_deps_key(_key "${_name}")
+        set(DEPS_BASE_${_key}_PROVIDER "${DEPS_DECL_${_key}_PROVIDER}" PARENT_SCOPE)
+    endforeach()
+endfunction()
+
+function(opendcc_deps_base_provider out name)
+    opendcc_deps_key(_key "${name}")
+    set(${out} "${DEPS_BASE_${_key}_PROVIDER}" PARENT_SCOPE)
 endfunction()
 
 # usd feature switch as ON/OFF; anything undeclared is OFF, as in the spec format.
@@ -484,10 +521,33 @@ function(opendcc_deps_spec_validate out)
             opendcc_deps_list_append(_problems "${_name}: \"enabled\" must be ON or OFF in ${_where}")
         endif()
         if(NOT "${_provider}" IN_LIST DEPS_PROVIDERS)
-            string(CONCAT _problem "${_name}: \"provider\" must be one of brew, headers, manual, source in "
-                                   "${_where}")
+            string(CONCAT _problem "${_name}: \"provider\" must be one of brew, external, headers, manual, source "
+                                   "in ${_where}")
             opendcc_deps_list_append(_problems "${_problem}")
             continue()
+        endif()
+        set(_prefix "${DEPS_DECL_${_key}_PREFIX}")
+        set(_align "${DEPS_DECL_${_key}_ALIGN}")
+        if("${_provider}" STREQUAL "external")
+            if("${_prefix}" STREQUAL "")
+                opendcc_deps_list_append(_problems "${_name}: external provider needs a \"prefix\" in ${_where}")
+            elseif(NOT IS_ABSOLUTE "${_prefix}")
+                opendcc_deps_list_append(_problems
+                                         "${_name}: external \"prefix\" must be an absolute path in ${_where}")
+            endif()
+            if("${DEPS_DECL_${_key}_VERSION}" STREQUAL "")
+                opendcc_deps_list_append(
+                    _problems "${_name}: external provider needs a \"version\" to align against in ${_where}")
+            endif()
+        else()
+            if(NOT "${_prefix}" STREQUAL "")
+                opendcc_deps_list_append(_problems
+                                         "${_name}: \"prefix\" is only for the external provider in ${_where}")
+            endif()
+            if(NOT "${_align}" STREQUAL "")
+                opendcc_deps_list_append(_problems
+                                         "${_name}: \"align\" is only for the external provider in ${_where}")
+            endif()
         endif()
         if("${_provider}" STREQUAL "brew" AND DEPS_DECL_${_key}"${_FORMULA}" STREQUAL "")
             opendcc_deps_list_append(_problems "${_name}: brew provider needs a \"formula\" in ${_where}")

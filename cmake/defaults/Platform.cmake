@@ -14,6 +14,11 @@ if(APPLE)
                             "@loader_path/../plugin/usd")
     set(CMAKE_INSTALL_NAME_DIR "@rpath")
 
+    # An external USD must win over a copy left in the dependency prefix: @rpath/libusd_* resolves in rpath order.
+    if(DCC_DEPS_USD_EXTERNAL_LIB_DIR)
+        list(APPEND CMAKE_INSTALL_RPATH "${DCC_DEPS_USD_EXTERNAL_LIB_DIR}")
+    endif()
+
     # Dependencies built into the private prefix (qtadvanceddocking, Embree, Bullet) are not copied into the install
     # tree on macOS, so the installed binaries have to find them through the prefix itself.
     if(DCC_DEPS_PREFIX)

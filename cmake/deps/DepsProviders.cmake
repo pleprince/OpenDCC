@@ -45,6 +45,23 @@ function(opendcc_deps_ensure_brew name)
         return()
     endif()
 
+    # brew moves forward only: upgrade cannot reach a pin below the installed keg, so report both sides instead of
+    # running brew and failing on its result. This is what an aligned dependency hits when the external build was
+    # made against an older library than the spec provisions.
+    if(NOT "${_installed}" STREQUAL "")
+        opendcc_deps_version_split(_installed_parts "${_installed}")
+        opendcc_deps_version_split(_pin_parts "${_pin}")
+        opendcc_deps_version_cmp(_direction "${_pin_parts}" "${_installed_parts}")
+        if(_direction LESS 0)
+            opendcc_deps_rel(_overlay "${DEPS_OVERLAY_FILE}")
+            string(CONCAT _problem "${name}: brew ${_formula} is ${_installed} but the spec asks for ${_pin}, and "
+                                   "brew cannot downgrade. Pin ${name} to what that keg provides "
+                                   "(opendcc_deps_spec_dependency(${name} VERSION ${_installed}) in ${_overlay}) or "
+                                   "install ${_formula} ${_pin} yourself and name that formula in the spec.")
+            opendcc_deps_die("${_problem}")
+        endif()
+    endif()
+
     find_program(DEPS_BREW_EXECUTABLE brew)
     if(NOT DEPS_BREW_EXECUTABLE)
         opendcc_deps_die("brew is required to provision ${name}; install Homebrew first")
@@ -173,6 +190,26 @@ endfunction()
 
 function(opendcc_deps_provider_headers name forced)
     opendcc_deps_provision_source("${name}" ${forced})
+endfunction()
+
+# An external dependency is already installed: there is nothing to build, so the whole provider is the verification
+# and the report of what it verified.
+function(opendcc_deps_provider_external name forced)
+    opendcc_deps_external_prefix(_prefix "${name}")
+    opendcc_deps_external_problems(_problems _notes "${name}")
+    foreach(_note IN LISTS _notes)
+        opendcc_deps_info("${_note}")
+    endforeach()
+    if(NOT "${_problems}" STREQUAL "")
+        set(_text "external ${name} at ${_prefix} does not match this build:")
+        foreach(_problem IN LISTS _problems)
+            string(APPEND _text "\n  ${_problem}")
+        endforeach()
+        opendcc_deps_die("${_text}")
+    endif()
+    if(EXISTS "${DEPS_PREFIX}/stamps/${name}.cmake")
+        opendcc_deps_info("note: ${DEPS_PREFIX} still contains a provisioned ${name}; the external one is used")
+    endif()
 endfunction()
 
 function(opendcc_deps_provider_manual name forced)

@@ -384,7 +384,7 @@ function(opendcc_deps_plan_json out kind_var markers_var patches_var patch_diges
     opendcc_deps_json_array_from_list(_markers "${markers_var}")
     opendcc_deps_json_array_from_list(_patches "${patches_var}")
     opendcc_deps_json_array_from_list(_patch_digests "${patch_digests_var}")
-    opendcc_deps_json_array_from_list(_requires "${requires_var}")
+    opendcc_deps_json_array_from_list(_requires_json "${requires_var}")
 
     # Local names must not collide with the variables the caller passed by name: ${steps_var} names the caller's
     # list, and a same-named local here would shadow it.
@@ -401,9 +401,19 @@ function(opendcc_deps_plan_json out kind_var markers_var patches_var patch_diges
 
     opendcc_deps_json_env(_env_json "${env_var}")
 
+    # A dependency that builds against Python is only equivalent to itself under the same interpreter, and the venv
+    # path says nothing about its version: record the version so a Python change rebuilds what links against it.
+    set(_python_json "")
+    foreach(_required IN LISTS ${requires_var})
+        if("${_required}" STREQUAL "python")
+            opendcc_deps_json_quote(_python_version "${DEPS_SPEC_PYTHON_VERSION}")
+            set(_python_json ", \"python\": ${_python_version}")
+        endif()
+    endforeach()
+
     string(CONCAT _plan "{\"kind\": ${_kind}, \"markers\": ${_markers}, \"patches\": ${_patches}, "
-                        "\"patch_sha256\": ${_patch_digests}, \"requires\": ${_requires}, \"steps\": "
-                        "${_steps_json}, \"env\": ${_env_json}}")
+                        "\"patch_sha256\": ${_patch_digests}, \"requires\": ${_requires_json}, \"steps\": "
+                        "${_steps_json}, \"env\": ${_env_json}${_python_json}}")
     set(${out} "${_plan}" PARENT_SCOPE)
 endfunction()
 
@@ -684,6 +694,24 @@ function(opendcc_deps_generated_cache_text out)
             opendcc_deps_list_append(_prefix_path "${_keg}")
         endif()
     endforeach()
+    # An external dependency's prefix is a complete install tree, not just that dependency: an external USD ships
+    # the OpenImageIO, OpenEXR, Imath, OpenColorIO and TBB it was built with. So it goes last, after everything this
+    # build provisions, and only answers for packages the spec does not provide. USD's own location does not depend
+    # on this order: USD_ROOT, USD_CONFIG_FILE and the rest are forced below.
+    foreach(_name IN LISTS DEPS_KNOWN_DEPENDENCIES)
+        opendcc_deps_dep_enabled(_enabled "${_name}")
+        if(NOT _enabled)
+            continue()
+        endif()
+        opendcc_deps_decl(_provider "${_name}" PROVIDER)
+        if(NOT "${_provider}" STREQUAL "external")
+            continue()
+        endif()
+        opendcc_deps_external_prefix(_path "${_name}")
+        if(NOT "${_path}" IN_LIST _prefix_path)
+            opendcc_deps_list_append(_prefix_path "${_path}")
+        endif()
+    endforeach()
     set(_line "list(PREPEND CMAKE_PREFIX_PATH")
     foreach(_prefix IN LISTS _prefix_path)
         opendcc_deps_quote(_quoted "${_prefix}")
@@ -692,6 +720,58 @@ function(opendcc_deps_generated_cache_text out)
     string(APPEND _line ")")
     string(APPEND _text "${_line}\n")
     string(APPEND _text "\n")
+
+    # The include roots of everything this build provisions, for the application to put on the compiler line before
+    # any library's interface include directories (Packages.cmake does that). A dependency's prefix is normally only
+    # its own headers, but an external dependency's is a whole toolchain, and it is reached through USD's imported
+    # targets, which come after the target's own includes: without this list `<OpenImageIO/imagebuf.h>` resolves to
+    # the external USD's copy while the build links the OpenImageIO the spec provisions.
+    set(_include_dirs "")
+    foreach(_name IN LISTS DEPS_KNOWN_DEPENDENCIES)
+        opendcc_deps_dep_enabled(_enabled "${_name}")
+        if(NOT _enabled)
+            continue()
+        endif()
+        if("${_name}" IN_LIST DEPS_PREFIX_PATH_EXCLUDE)
+            continue()
+        endif()
+        opendcc_deps_decl(_provider "${_name}" PROVIDER)
+        if("${_provider}" STREQUAL "external" OR "${_provider}" STREQUAL "manual")
+            continue()
+        endif()
+        opendcc_deps_keg(_keg "${_name}")
+        if(IS_DIRECTORY "${_keg}/include" AND NOT "${_keg}/include" IN_LIST _include_dirs)
+            opendcc_deps_list_append(_include_dirs "${_keg}/include")
+        endif()
+    endforeach()
+    # Then the external installations, in the same list and in that order: they carry what the external build itself
+    # uses (a TBB its pxr headers instantiate, Imath, MaterialX), which this build may compile against but must not
+    # put ahead of its own dependencies, and which has to beat the ambient Homebrew include directory that some
+    # imported target adds.
+    foreach(_name IN LISTS DEPS_KNOWN_DEPENDENCIES)
+        opendcc_deps_dep_enabled(_enabled "${_name}")
+        if(NOT _enabled)
+            continue()
+        endif()
+        opendcc_deps_decl(_provider "${_name}" PROVIDER)
+        if(NOT "${_provider}" STREQUAL "external")
+            continue()
+        endif()
+        opendcc_deps_external_prefix(_path "${_name}")
+        if(IS_DIRECTORY "${_path}/include" AND NOT "${_path}/include" IN_LIST _include_dirs)
+            opendcc_deps_list_append(_include_dirs "${_path}/include")
+        endif()
+    endforeach()
+    if(NOT "${_include_dirs}" STREQUAL "")
+        set(_line "set(DCC_DEPS_INCLUDE_DIRS")
+        foreach(_directory IN LISTS _include_dirs)
+            opendcc_deps_quote(_quoted "${_directory}")
+            string(APPEND _line " ${_quoted}")
+        endforeach()
+        string(APPEND _line ")")
+        string(APPEND _text "${_line}\n")
+        string(APPEND _text "\n")
+    endif()
 
     string(APPEND _text
            "# Which dependencies are enabled, and at which version. Authoritative, not cache variables.\n")
@@ -771,10 +851,17 @@ function(opendcc_deps_generated_cache_text out)
                 continue()
             endif()
             opendcc_deps_decl(_formula "${_name}" FORMULA)
+            opendcc_deps_decl(_provider "${_name}" PROVIDER)
+            opendcc_deps_dependency_prefix(_dependency_prefix "${_name}")
             set(_expanded "${_raw_value}")
-            string(REPLACE "@PREFIX@" "${DEPS_PREFIX}" _expanded "${_expanded}")
+            string(REPLACE "@PREFIX@" "${_dependency_prefix}" _expanded "${_expanded}")
             if("${_expanded}" MATCHES "@FORMULA@")
-                opendcc_deps_brew_prefix(_keg "${_formula}")
+                if("${_provider}" STREQUAL "external")
+                    # An external installation has no formula to name: its own prefix answers both tokens.
+                    set(_keg "${_dependency_prefix}")
+                else()
+                    opendcc_deps_brew_prefix(_keg "${_formula}")
+                endif()
                 string(REPLACE "@FORMULA@" "${_keg}" _expanded "${_expanded}")
             endif()
             if("${_variable}" MATCHES "^(PYTHON_EXECUTABLE|Python3_EXECUTABLE|Python_EXECUTABLE)$")
@@ -788,6 +875,41 @@ function(opendcc_deps_generated_cache_text out)
         endforeach()
     endforeach()
     string(APPEND _text "\n")
+
+    # USD's location is authoritative in the generated cache: FindPxrUSD resolves USD_ROOT, the include/library
+    # directories, pxrConfig.cmake and usdGenSchema once and then reuses the cached answers, so switching prefixes
+    # in an existing build directory would silently keep the old one. Forced, and placed after the finder roots
+    # above so they win over the generic USD_ROOT the spec exports.
+    opendcc_deps_dep_enabled(_usd_enabled usd)
+    if(_usd_enabled)
+        opendcc_deps_decl(_usd_provider usd PROVIDER)
+        opendcc_deps_dependency_prefix(_usd_prefix usd)
+        opendcc_deps_usd_paths(_usd_include _usd_library _usd_config _usd_genschema _usd_problems "${_usd_prefix}")
+        string(APPEND _text
+               "# USD's location, from the spec. Authoritative: a previous configure cannot keep its own.\n")
+        opendcc_deps_quote(_value "${_usd_prefix}")
+        string(APPEND _text "set(USD_ROOT ${_value} CACHE PATH \"\" FORCE)\n")
+        opendcc_deps_quote(_value "${_usd_include}")
+        string(APPEND _text "set(USD_INCLUDE_DIR ${_value} CACHE PATH \"\" FORCE)\n")
+        opendcc_deps_quote(_value "${_usd_library}")
+        string(APPEND _text "set(USD_LIBRARY_DIR ${_value} CACHE PATH \"\" FORCE)\n")
+        opendcc_deps_quote(_value "${_usd_config}")
+        string(APPEND _text "set(USD_CONFIG_FILE ${_value} CACHE FILEPATH \"\" FORCE)\n")
+        opendcc_deps_quote(_value "${_usd_genschema}")
+        string(APPEND _text "set(USD_GENSCHEMA_SCRIPT ${_value} CACHE FILEPATH \"\" FORCE)\n")
+        if("${_usd_provider}" STREQUAL "external")
+            # The install rpath has to prefer this lib directory over a copy left in the dependency prefix.
+            opendcc_deps_quote(_value "${_usd_prefix}")
+            string(APPEND _text "set(DCC_DEPS_USD_EXTERNAL_PREFIX ${_value} CACHE PATH \"\" FORCE)\n")
+            opendcc_deps_quote(_value "${_usd_library}")
+            string(APPEND _text "set(DCC_DEPS_USD_EXTERNAL_LIB_DIR ${_value} CACHE PATH \"\" FORCE)\n")
+        else()
+            # Empty on purpose: switching back from an external USD must drop its rpath entry and its prefix.
+            string(APPEND _text "set(DCC_DEPS_USD_EXTERNAL_PREFIX \"\" CACHE PATH \"\" FORCE)\n")
+            string(APPEND _text "set(DCC_DEPS_USD_EXTERNAL_LIB_DIR \"\" CACHE PATH \"\" FORCE)\n")
+        endif()
+        string(APPEND _text "\n")
+    endif()
 
     string(APPEND _text "# Fixed by the provisioned-prefix model; a preset or -D value still wins.\n")
     foreach(_variable IN LISTS DEPS_CMAKE_BOOL_DEFAULTS)
@@ -844,6 +966,11 @@ function(opendcc_deps_dep_state out name)
         return()
     endif()
     opendcc_deps_decl(_provider "${name}" PROVIDER)
+    if("${_provider}" STREQUAL "external")
+        opendcc_deps_external_state(_external_state _problems "${name}")
+        set(${out} "${_external_state}" PARENT_SCOPE)
+        return()
+    endif()
     if("${_provider}" STREQUAL "brew")
         opendcc_deps_decl(_formula "${name}" FORMULA)
         opendcc_deps_brew_version(_installed "${_formula}")
@@ -977,7 +1104,13 @@ function(opendcc_deps_report_check out)
         opendcc_deps_pack_row(_row "${_name}" "${_version}" "${_provider}" "${_state}")
         opendcc_deps_list_append(_rows "${_row}")
 
-        if("${_state}" STREQUAL "drift")
+        if("${_provider}" STREQUAL "external")
+            # An external dependency's state is only "ok" when every disagreement was absent, so list them all.
+            opendcc_deps_external_problems(_foreign _notes "${_name}")
+            foreach(_problem IN LISTS _foreign)
+                opendcc_deps_list_append(_problems "${_problem}")
+            endforeach()
+        elseif("${_state}" STREQUAL "drift")
             opendcc_deps_decl(_formula "${_name}" FORMULA)
             opendcc_deps_brew_version(_installed "${_formula}")
             opendcc_deps_drift_message(_message "${_name}" "${_installed}" "${_raw_version}"
@@ -1011,6 +1144,8 @@ function(opendcc_deps_report_list)
         opendcc_deps_dep_enabled(_enabled "${_name}")
         if("${_provider}" STREQUAL "brew")
             set(_source "${_formula}")
+        elseif("${_provider}" STREQUAL "external")
+            opendcc_deps_external_prefix(_source "${_name}")
         else()
             set(_source "${_url}")
         endif()
@@ -1214,12 +1349,14 @@ function(opendcc_deps_main)
     # writes to stderr in both configure and script mode.
     if("${DEPS_MODE}" STREQUAL "print-config")
         message("${_header}")
+        opendcc_deps_report_alignment()
         opendcc_deps_config_json(_json)
         execute_process(COMMAND "${CMAKE_COMMAND}" -E echo "${_json}")
         return()
     endif()
     message(STATUS "${_header}")
     message(STATUS "")
+    opendcc_deps_report_alignment()
 
     if("${DEPS_MODE}" STREQUAL "list")
         opendcc_deps_report_list()
@@ -1327,12 +1464,15 @@ function(opendcc_deps_main)
     # Bottles and the shared interpreter first: every source build links against them.
     set(_brew_targets "")
     set(_source_targets "")
+    set(_external_targets "")
     foreach(_name IN LISTS _targets)
         opendcc_deps_decl(_provider "${_name}" PROVIDER)
         if("${_provider}" STREQUAL "brew")
             opendcc_deps_list_append(_brew_targets "${_name}")
         elseif("${_provider}" STREQUAL "source" OR "${_provider}" STREQUAL "headers")
             opendcc_deps_list_append(_source_targets "${_name}")
+        elseif("${_provider}" STREQUAL "external")
+            opendcc_deps_list_append(_external_targets "${_name}")
         endif()
     endforeach()
     opendcc_deps_provision(_brew_targets _forced)
@@ -1362,6 +1502,13 @@ function(opendcc_deps_main)
         message(STATUS "")
     endif()
 
+    # External dependencies are verified, not built: the comparison runs against the kegs provisioned above and
+    # imports with the venv interpreter, so it has to come after both.
+    if(NOT "${_external_targets}" STREQUAL "")
+        opendcc_deps_provision(_external_targets _forced)
+        message(STATUS "")
+    endif()
+
     opendcc_deps_order_targets(_ordered_sources _source_targets)
     opendcc_deps_provision(_ordered_sources _forced)
 
@@ -1380,6 +1527,7 @@ function(opendcc_deps_main)
     foreach(_name IN LISTS _enabled)
         opendcc_deps_dep_state(_state "${_name}")
         if("${_state}" STREQUAL "missing"
+           OR "${_state}" STREQUAL "mismatch"
            OR "${_state}" STREQUAL "drift"
            OR "${_state}" STREQUAL "stale"
            OR "${_state}" STREQUAL "no recipe")

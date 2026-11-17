@@ -8,6 +8,14 @@
 #
 # Nothing here is a build-system configuration: the driver translates this into install_dir/deps/deps.generated.cmake,
 # which is the only thing the application build reads.
+#
+# To build against a USD that was not provisioned here, point the overlay at it
+# (deps/macos-arm64.local.cmake); CMAKE_CURRENT_LIST_DIR is the overlay's own directory:
+#   opendcc_deps_spec_dependency(usd PROVIDER external PREFIX "${CMAKE_CURRENT_LIST_DIR}/../install_dir/deps")
+# `cmake --preset macos-arm64-deps` then adopts that installation's release, feature set and Python/TBB/OpenSubdiv
+# pins instead of building a USD, and prints what it adopted. If the path is not there, the spec falls back to the
+# provider this file declares for it (source), so USD is downloaded and built instead of failing. Add ALIGN OFF to
+# verify the spec against the installation instead, and to require it.
 
 opendcc_deps_spec_begin(PLATFORM macos-arm64 SCHEMA 1)
 

@@ -148,6 +148,111 @@ fresh prefix completes in one run. Source archives are pinned by sha256 in the t
 Configure fails with an explicit message if the spec changed since the prefix was provisioned, so a stale
 `deps.generated.cmake` cannot silently build against the wrong dependency set.
 
+##### Using a USD build you already have
+
+Any dependency can be declared `PROVIDER external` with an absolute `PREFIX`. For USD the driver does not check
+that installation against the spec and complain: by default it reads the installation and **adopts** what it
+finds, so the whole build — provisioning, generated cache, application — follows that USD:
+
+```cmake
+# deps/macos-arm64.local.cmake
+opendcc_deps_spec_dependency(usd PROVIDER external PREFIX "${CMAKE_CURRENT_LIST_DIR}/../my-usd-build")
+```
+
+`cmake --preset macos-arm64-deps` then aligns the merged spec and reports every value it changed, instead of
+building a USD:
+
+```
+external dependencies:
+  usd.VERSION 25.08 -> 25.11
+  python.VERSION 3.12.16 -> 3.11 (the external USD was built against 3.11.15)
+  python.EXPECT "==3.12" -> "any" (the external build defines the version)
+  python VERSION 3.12 -> 3.11 (the venv is recreated and everything built against it rebuilds)
+  python FORMULA python@3.12 -> python@3.11
+  opensubdiv.VERSION 3.8.0 kept (the external USD requires >= 3.6.1)
+  usd.features.usdview OFF -> ON
+  tbb brew -> external /path/to/my-usd-build (the external USD is built against tbb 2020.3 and its headers
+      instantiate that API)
+  tbb.VERSION 2023.2.0 -> 2020.3
+  tbb.EXPECT ">=2021" -> "any" (the external build defines the version)
+```
+
+What is read from the installation:
+
+- **Release**: `PXR_MINOR_VERSION`/`PXR_PATCH_VERSION` from `include/pxr/pxr.h`, adopted as `usd.VERSION`.
+- **Pins it was built against**: the `find_dependency()` lines in its `pxrConfig.cmake`. A version there is a
+  declaration of what that build linked, and the three are not the same kind of constraint:
+  `find_dependency(Python3 "3.11.15" EXACT)` names its interpreter, so the `python` dependency and the venv
+  follow it (major.minor only — the patch is whatever keg brew has); `find_dependency(TBB 2020.3 CONFIG)` and
+  `find_dependency(OpenSubdiv 3.6.1 CONFIG)` are **minimums**, so a spec that already provisions a newer keg
+  keeps it and only an older pin is raised. The check applies the same rule — a spec pin *older* than the
+  recorded minimum is the failure, a newer one is not. brew cannot downgrade, and the driver refuses to try: a pin
+  below the installed keg fails with both versions and what to change.
+- **The TBB it ships**: a USD built without a TBB config package (`PXR_FIND_TBB_IN_CONFIG "OFF"`, the default case
+  for a self-contained install) carries its own TBB and points `TBB::tbb` at it, which makes that line above dead
+  text. Then TBB is not a minimum at all: `pxr`'s public headers instantiate the TBB API of the build they came
+  from, and TBB has no compatibility across the oneTBB boundary (`tbb::task` is gone from oneTBB 2021), so the
+  `tbb` dependency is moved to that installation — `PROVIDER external`, its prefix, its version read from
+  `include/oneapi/tbb/version.h` or `include/tbb/tbb_stddef.h`. This is the one case where alignment replaces a
+  dependency the spec provisions instead of adjusting a version.
+- **Feature set**: one decisive artifact per switch — `lib/`, `plugin/usd/`, `lib/python/pxr/` — adopted as
+  `usd.features.*`. `opencolorio`, `ptex`, `openvdb`, `hdf5`, `tests`, `examples` and `tutorials` leave no such
+  artifact, so the spec's value stands and the report says the switch cannot be verified.
+
+Adopting a version has consequences the driver then carries out: a different keg version is provisioned, a
+different Python minor recreates the venv (and rebuilds every source dependency that builds against it, which is
+why the interpreter is part of their build identity), and an adopted version outside a declared `EXPECT` range
+drops that range to `any` — a range says what this build supports, and an installation we do not build is not
+something we can claim to support.
+
+If the installation is not available at all — the directory is missing, or it carries no `include/pxr/pxr.h` /
+`lib/lib*usd_usd.*` — that is not an error: the driver falls back to the provider this platform declared
+for the dependency before the overlay, so USD is downloaded and built into the prefix and the run continues.
+
+```
+external dependencies:
+  usd: /path/to/my-usd-build does not exist; provisioning it with provider source instead
+```
+
+An installation that exists but cannot be read is a hard error, and so is one that does not agree with itself:
+
+- **Layout**: `pxrConfig.cmake` (root, `lib/cmake/pxr` or `cmake`) and `bin/usdGenSchema` must exist; without the
+  two markers above the dependency is unavailable rather than broken, and falls back as described.
+- **Linkage**: every `libusd_*` and `plugin/usd/*` binary may only reference system libraries, libraries private
+  to the external prefix, the embedded Python, or a library an enabled dependency provides under the same soname
+  (`libOpenImageIO.3.2.dylib` in both places is fine; a differing soname is not).
+- **Import**: the modules this build uses must import with the prefix's interpreter.
+
+`ALIGN OFF` on the declaration changes both halves: the spec stays authoritative, nothing is adopted, and the
+installation is *required* — a missing one fails instead of falling back. Every disagreement then fails
+`macos-arm64-deps-check`, which is what you want in CI when the point is to prove a machine's USD is the pinned
+one.
+
+Either way that prefix is authoritative once in place: `deps.generated.cmake` pins `USD_ROOT`,
+`USD_INCLUDE_DIR`, `USD_LIBRARY_DIR`, `USD_CONFIG_FILE` and `USD_GENSCHEMA_SCRIPT` with `FORCE`, so an existing
+build directory cannot keep the previous USD, and the external `lib` directory comes first on the install rpath —
+both the build tree and the installed application link and load it. Deleting the overlay and re-running
+`cmake --preset macos-arm64-deps` restores the provisioned paths, including the rpath entry.
+
+That authority is bounded to what USD needs. An external USD is a *complete* prefix — it carries the OpenImageIO,
+OpenEXR, Imath, OpenColorIO, OpenSubdiv and TBB it was built with — so letting it answer for those would silently
+link libraries the spec does not pin, and compiling its headers against the provisioned copies builds a
+source-level mismatch (OpenImageIO 2.5 headers, 3.2 library) that fails at compile time or, worse, loads. Two rules
+keep the two sides apart:
+
+- The external prefix is last in `CMAKE_PREFIX_PATH`, after everything the spec provisions, so a `find_package()`
+  only falls back to it for a package nothing provides. USD itself does not depend on that order: its paths are
+  forced.
+- `deps.generated.cmake` exports `DCC_DEPS_INCLUDE_DIRS` — the include roots of the provisioned dependencies, then
+  the external prefixes' — and the application adds them as system includes before any library's exported include
+  directories. That is what makes `<OpenImageIO/...>` the OpenImageIO that is linked, and `<tbb/...>` the TBB the
+  adopted `tbb` dependency placed second.
+
+USD's own binaries resolve their dependencies by `@rpath` inside that prefix, which the install rpath keeps ahead
+of the dependency prefix. The exceptions where a provisioned dependency cannot win are handled by alignment rather
+than by ordering — the TBB above, and the `Imath_DIR`/`MaterialX_DIR` that `pxrConfig.cmake` hardcodes to its
+install.
+
 Environment selectors, for one-off runs (never cached):
 
 | Variable | Effect |
