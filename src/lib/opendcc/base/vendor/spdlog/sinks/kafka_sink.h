@@ -10,11 +10,11 @@
 // https://github.com/confluentinc/librdkafka
 //
 
-#include "opendcc/base/vendor/spdlog/async.h"
-#include "opendcc/base/vendor/spdlog/details/log_msg.h"
-#include "opendcc/base/vendor/spdlog/details/null_mutex.h"
-#include "opendcc/base/vendor/spdlog/details/synchronous_factory.h"
-#include "opendcc/base/vendor/spdlog/sinks/base_sink.h"
+#include <opendcc/base/vendor/spdlog/async.h>
+#include <opendcc/base/vendor/spdlog/details/log_msg.h>
+#include <opendcc/base/vendor/spdlog/details/null_mutex.h>
+#include <opendcc/base/vendor/spdlog/details/synchronous_factory.h>
+#include <opendcc/base/vendor/spdlog/sinks/base_sink.h>
 #include <mutex>
 #include <opendcc/base/vendor/spdlog/common.h>
 

@@ -9,6 +9,7 @@ opendcc_make_library(
     PLUGIN
     INCLUDE_DIRS
     ${OPENDCC_CURRENT_PACKAGE_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/src/lib/opendcc/base/vendor/vhacd
     PRIVATE_HEADERS
     ${_src_dir}/api.h
     ${_src_dir}/debug_drawer.h
@@ -22,6 +23,13 @@ opendcc_make_library(
     ${_src_dir}/entry_point.cpp
     ${_src_dir}/session.cpp
     ${_src_dir}/utils.cpp
+    # V-HACD ships in Bullet's Extras without a CMake build file, and the conda-forge Bullet
+    # package does not install it; the sources are vendored instead (see vendor/readme.md).
+    ${PROJECT_SOURCE_DIR}/src/lib/opendcc/base/vendor/vhacd/VHACD.cpp
+    ${PROJECT_SOURCE_DIR}/src/lib/opendcc/base/vendor/vhacd/vhacdICHull.cpp
+    ${PROJECT_SOURCE_DIR}/src/lib/opendcc/base/vendor/vhacd/vhacdManifoldMesh.cpp
+    ${PROJECT_SOURCE_DIR}/src/lib/opendcc/base/vendor/vhacd/vhacdMesh.cpp
+    ${PROJECT_SOURCE_DIR}/src/lib/opendcc/base/vendor/vhacd/vhacdVolume.cpp
     PRIVATE_DEFINITIONS
     BULLET_PHYSICS_EXPORT
     LIBRARY_DEPENDENCIES

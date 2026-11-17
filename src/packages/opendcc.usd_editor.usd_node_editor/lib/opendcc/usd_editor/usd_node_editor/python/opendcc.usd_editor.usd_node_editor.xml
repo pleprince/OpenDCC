@@ -72,14 +72,23 @@
         <object-type name="PropertyWithPortsLayoutItem"/>
         <object-type name="NamedPropertyLayoutItem"/>
         <object-type name="MorePortLayoutItem"/>
-        <object-type name="UsdPrimNodeItemBase"/>
+        <!-- Abstract in C++: the pure virtuals they declare are not wrappable (QVector of
+             internal item pointers, SdfPath/UsdPrim), so shiboken cannot generate the
+             overrides a Python subclass would need. Dropping the constructors keeps the types
+             usable as references without promising an instantiable Python class. -->
+        <object-type name="UsdPrimNodeItemBase">
+            <modify-function signature="UsdPrimNodeItemBase(OpenDCC::UsdGraphModel&amp;, const OpenDCC::NodeId&amp;, const std::string&amp;)"
+                              remove="all"/>
+        </object-type>
         <object-type name="UsdPrimNodeItem"/>
         <object-type name="UsdConnectionSnapper"/>
         <object-type name="BackdropLiveNodeItem"/>
         <object-type name="BackdropNodeItem"/>
         <object-type name="NavigationBar"/>
         <object-type name="UsdItemRegistry"/>
-        <object-type name="UsdGraphModel"/>
+        <object-type name="UsdGraphModel">
+            <modify-function signature="UsdGraphModel(QObject*)" remove="all"/>
+        </object-type>
         <object-type name="UsdEditorGraphModel"/>
     </namespace-type>
 </typesystem>

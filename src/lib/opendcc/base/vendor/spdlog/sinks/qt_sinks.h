@@ -12,10 +12,10 @@
 // QObject, and then use a standard signal/slot.
 //
 
-#include "opendcc/base/vendor/spdlog/common.h"
-#include "opendcc/base/vendor/spdlog/details/log_msg.h"
-#include "opendcc/base/vendor/spdlog/details/synchronous_factory.h"
-#include "opendcc/base/vendor/spdlog/sinks/base_sink.h"
+#include <opendcc/base/vendor/spdlog/common.h>
+#include <opendcc/base/vendor/spdlog/details/log_msg.h>
+#include <opendcc/base/vendor/spdlog/details/synchronous_factory.h>
+#include <opendcc/base/vendor/spdlog/sinks/base_sink.h>
 #include <array>
 
 #include <QPlainTextEdit>
@@ -225,7 +225,7 @@ protected:
     std::array<QTextCharFormat, level::n_levels> colors_;
 };
 
-#include "opendcc/base/vendor/spdlog/details/null_mutex.h"
+#include <opendcc/base/vendor/spdlog/details/null_mutex.h>
 #include <mutex>
 
 using qt_sink_mt = qt_sink<std::mutex>;

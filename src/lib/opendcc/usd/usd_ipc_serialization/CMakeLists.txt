@@ -26,9 +26,13 @@ if(WIN32)
     target_link_libraries(${TARGET_NAME} bcrypt)
 endif()
 
+# The boost/python headers are a build requirement only: this target is installed with
+# install(EXPORT), and an install interface may not name paths of the build environment.
 target_include_directories(
-    ${TARGET_NAME} PUBLIC "$<BUILD_INTERFACE:${ZMQ_INCLUDE_DIRS}>" "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/lib/>"
-                          "$<INSTALL_INTERFACE:include>" ${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
+    ${TARGET_NAME}
+    PUBLIC "$<BUILD_INTERFACE:${ZMQ_INCLUDE_DIRS}>" "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/lib/>"
+           "$<INSTALL_INTERFACE:include>" "$<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>"
+           "$<BUILD_INTERFACE:${PYTHON_INCLUDE_DIRS}>")
 
 install(
     TARGETS ${TARGET_NAME}

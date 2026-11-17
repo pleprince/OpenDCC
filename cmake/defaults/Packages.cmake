@@ -16,12 +16,39 @@ endif()
 find_package(doctest REQUIRED)
 find_package(TBB REQUIRED)
 
-# Qt's emit macro conflicts with oneTBB; include profiling first, including in AUTOMOC output.
-if(TBB_INCLUDE_DIRS AND EXISTS "${TBB_INCLUDE_DIRS}/oneapi/tbb/profiling.h")
+# fmt is used header-only, through spdlog (SPDLOG_FMT_EXTERNAL, see CXXDefaults.cmake). The
+# vendored spdlog headers are installed as opendcc headers, so every target that includes one of
+# them -- not just the ones linking `logging` -- needs fmt on the include path.
+find_package(fmt REQUIRED)
+get_target_property(DCC_FMT_INCLUDE_DIRS fmt::fmt INTERFACE_INCLUDE_DIRECTORIES)
+include_directories(${DCC_FMT_INCLUDE_DIRS})
+
+# Qt's emit macro conflicts with oneTBB: oneapi/tbb/profiling.h declares `void emit()`, and Qt
+# defines `emit` as an empty macro, which leaves no member name. Include profiling.h before any
+# Qt header instead -- in every translation unit, so AUTOMOC output is covered too.
+#
+# The include directory is taken from the imported target: oneTBB's package is target-only and
+# leaves TBB_INCLUDE_DIRS empty, which silently skipped this include for years.
+set(DCC_TBB_INCLUDE_DIR "")
+if(TARGET TBB::tbb)
+    get_target_property(_tbb_interface_dirs TBB::tbb INTERFACE_INCLUDE_DIRECTORIES)
+    if(_tbb_interface_dirs)
+        set(DCC_TBB_INCLUDE_DIR "${_tbb_interface_dirs}")
+    endif()
+endif()
+if(NOT DCC_TBB_INCLUDE_DIR AND TBB_INCLUDE_DIRS)
+    set(DCC_TBB_INCLUDE_DIR "${TBB_INCLUDE_DIRS}")
+endif()
+if(NOT DCC_TBB_INCLUDE_DIR AND TBB_ROOT_DIR)
+    set(DCC_TBB_INCLUDE_DIR "${TBB_ROOT_DIR}/include")
+endif()
+if(DCC_TBB_INCLUDE_DIR AND EXISTS "${DCC_TBB_INCLUDE_DIR}/oneapi/tbb/profiling.h")
     if(MSVC)
-        add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/FI${TBB_INCLUDE_DIRS}/oneapi/tbb/profiling.h>")
+        add_compile_options(
+            "$<$<COMPILE_LANGUAGE:CXX>:/FI${DCC_TBB_INCLUDE_DIR}/oneapi/tbb/profiling.h>")
     else()
-        add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-include${TBB_INCLUDE_DIRS}/oneapi/tbb/profiling.h>")
+        add_compile_options(
+            "$<$<COMPILE_LANGUAGE:CXX>:-include${DCC_TBB_INCLUDE_DIR}/oneapi/tbb/profiling.h>")
     endif()
 endif()
 

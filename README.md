@@ -103,9 +103,18 @@ OpenDCC conforms to the [VFX Reference Platform](https://vfxplatform.com/), ensu
 
 ---
 
-### ⚙️ Building (Work in Progress)
+### ⚙️ Building
 
-This section is under active development.
+Dependencies and the toolchain come from [pixi](https://github.com/prefix-dev/pixi), versioned in
+[`VERSIONS.md`](VERSIONS.md). Either build OpenUSD from a release tag together with OpenDCC, or
+build OpenDCC against an existing OpenUSD installation:
+
+```sh
+pixi run all  -- --release 25.11      # OpenUSD 25.11 from source, then OpenDCC
+pixi run plan -- --usd /opt/usd/25.11 # or against an existing OpenUSD prefix
+```
+
+See [`BUILDING.md`](BUILDING.md) for the full workflow, task reference and troubleshooting.
 
 ---
 

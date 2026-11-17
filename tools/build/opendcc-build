@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+# Copyright Contributors to the OpenDCC project
+# SPDX-License-Identifier: Apache-2.0
+"""Entry point for the pixi build tasks: python tools/build/opendcc-build <command> ..."""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from opendcc_build.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())

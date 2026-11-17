@@ -16,10 +16,14 @@ static bool OCIO_apply_impl(OIIO::ImageBuf &R, const OIIO::ImageBuf &A, const Co
 {
     if (nthreads != 1 && roi.npixels() >= 1000)
     {
-        // Possible multiple thread case -- recurse via parallel_image
-        OIIO::ImageBufAlgo::parallel_image(
-            OIIO::bind(OCIO_apply_impl<Rtype, Atype>, OIIO::ref(R), OIIO::cref(A), color_processor, std::placeholders::_1 /*roi*/, 1 /*nthreads*/),
-            roi, nthreads);
+        // Possible multiple thread case -- recurse via parallel_image.
+        //
+        // OpenImageIO 3 changed this call twice: it no longer re-exports std::bind/ref/cref
+        // from its namespace, and parallel_image takes (ROI, paropt, std::function) instead of
+        // (callable, ROI, nthreads).
+        auto chunk = std::bind(OCIO_apply_impl<Rtype, Atype>, std::ref(R), std::cref(A),
+                               color_processor, std::placeholders::_1 /*roi*/, 1 /*nthreads*/);
+        OIIO::ImageBufAlgo::parallel_image(roi, OIIO::paropt(nthreads), chunk);
         return true;
     }
 

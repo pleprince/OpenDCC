@@ -5,6 +5,7 @@
 #include "opendcc/base/logging/logger.h"
 
 #include <shiboken.h>
+#include <sbkversion.h>
 #include <QtGlobal>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <pyside6_qtcore_python.h>
@@ -20,12 +21,23 @@
 // reference them by that exact name, so they must match the PySide in use.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #define DCC_PYSIDE_PKG "PySide6"
+#if SHIBOKEN_MAJOR_VERSION > 6 || (SHIBOKEN_MAJOR_VERSION == 6 && SHIBOKEN_MINOR_VERSION >= 11)
+// Shiboken 6.11 replaced the PyTypeObject** table with an array of Module::TypeInitStruct,
+// and renamed the generated globals accordingly.
+Shiboken::Module::TypeInitStruct *SbkPySide6_QtCoreTypeStructs = NULL;
+Shiboken::Module::TypeInitStruct *SbkPySide6_QtGuiTypeStructs = NULL;
+Shiboken::Module::TypeInitStruct *SbkPySide6_QtWidgetsTypeStructs = NULL;
+#define DCC_SBK_QTCORE_TYPES SbkPySide6_QtCoreTypeStructs
+#define DCC_SBK_QTGUI_TYPES SbkPySide6_QtGuiTypeStructs
+#define DCC_SBK_QTWIDGETS_TYPES SbkPySide6_QtWidgetsTypeStructs
+#else
 PyTypeObject **SbkPySide6_QtCoreTypes = NULL;
 PyTypeObject **SbkPySide6_QtGuiTypes = NULL;
 PyTypeObject **SbkPySide6_QtWidgetsTypes = NULL;
 #define DCC_SBK_QTCORE_TYPES SbkPySide6_QtCoreTypes
 #define DCC_SBK_QTGUI_TYPES SbkPySide6_QtGuiTypes
 #define DCC_SBK_QTWIDGETS_TYPES SbkPySide6_QtWidgetsTypes
+#endif
 #else
 #define DCC_PYSIDE_PKG "PySide2"
 PyTypeObject **SbkPySide2_QtCoreTypes = NULL;

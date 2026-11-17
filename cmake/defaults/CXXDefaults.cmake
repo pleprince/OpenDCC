@@ -68,6 +68,15 @@ if(MSVC)
 else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -DTBB_SUPPRESS_DEPRECATED_MESSAGES -DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 endif()
+
+# spdlog uses the fmt that comes with the environment instead of its own bundled copy.
+#
+# OpenImageIO 3.1 vendors fmt 12 inside its own headers (OpenImageIO/detail/fmt). Two fmt
+# copies cannot share a translation unit: fmt's headers coordinate through FMT_BEGIN_NAMESPACE,
+# so the copy processed second unconditionally lands in the first one's namespace. Pointing
+# spdlog at the same fmt version as OpenImageIO leaves one fmt in every translation unit.
+# FMT_HEADER_ONLY keeps it header-only, so nothing links libfmt.
+add_definitions(-DSPDLOG_FMT_EXTERNAL -DFMT_HEADER_ONLY)
 if(DCC_DEBUG_BUILD)
     add_compile_definitions(OPENDCC_DEBUG_BUILD)
 endif()

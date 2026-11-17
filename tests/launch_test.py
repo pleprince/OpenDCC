@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 
-def test_environment(directory, runtime_paths):
+def test_environment(directory, runtime_paths, python_paths):
     env = os.environ.copy()
     profile_paths = {
         "OPENDCC_SETTINGS_DIR": "settings",
@@ -37,6 +37,12 @@ def test_environment(directory, runtime_paths):
         if env.get(name):
             paths.append(env[name])
         env[name] = os.pathsep.join(paths)
+
+    if python_paths:
+        paths = list(python_paths)
+        if env.get("PYTHONPATH"):
+            paths.append(env["PYTHONPATH"])
+        env["PYTHONPATH"] = os.pathsep.join(paths)
     return env
 
 
@@ -44,6 +50,9 @@ def main():
     parser = argparse.ArgumentParser(description="Run a CTest command with a fresh user profile.")
     parser.add_argument(
         "--runtime-path", action="append", default=[], help="prepend a library directory"
+    )
+    parser.add_argument(
+        "--python-path", action="append", default=[], help="prepend a PYTHONPATH entry"
     )
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -55,7 +64,7 @@ def main():
 
     # Keep failed runs under the CTest working directory for inspection.
     directory = Path(tempfile.mkdtemp(prefix="run-", dir=Path.cwd()))
-    env = test_environment(directory, args.runtime_path)
+    env = test_environment(directory, args.runtime_path, args.python_path)
     print(f"Test directory: {directory}", flush=True)
     try:
         result = subprocess.run(command, cwd=directory, env=env, check=False).returncode

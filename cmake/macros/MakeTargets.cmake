@@ -477,13 +477,16 @@ function(opendcc_make_usd_schema TARGET_NAME)
 
     set_target_properties(${TARGET_NAME} PROPERTIES PUBLIC_HEADER "${_public_headers}")
 
+    # Third-party and generated headers are private build requirements: nothing installs them,
+    # so declaring them PUBLIC puts paths into the exported install interface that CMake
+    # rejects as "prefixed in the source directory" (a pixi environment inside the checkout).
     target_include_directories(
         ${TARGET_NAME}
-        PUBLIC ${Boost_INCLUDE_DIRS}
-               ${PYTHON_INCLUDE_DIRS}
-               ${USD_INCLUDE_DIR}
-               ${TBB_INCLUDE_DIR}
-               ${args_INCLUDE_DIRS}
+        PUBLIC $<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>
+               $<BUILD_INTERFACE:${PYTHON_INCLUDE_DIRS}>
+               $<BUILD_INTERFACE:${USD_INCLUDE_DIR}>
+               $<BUILD_INTERFACE:${TBB_INCLUDE_DIR}>
+               $<BUILD_INTERFACE:${args_INCLUDE_DIRS}>
                $<BUILD_INTERFACE:${_schema_sources_include_dir}>
                $<BUILD_INTERFACE:${_output_dir}>)
 
@@ -770,9 +773,10 @@ function(opendcc_make_shiboken_bindings TARGET_NAME)
     endif()
 
     # Shiboken does not inherit compiler flags; include profiling before Qt's emit macro.
+    # DCC_TBB_INCLUDE_DIR comes from Packages.cmake, which resolves it from the TBB target.
     set(_shiboken_clang_args "")
-    if(TBB_INCLUDE_DIRS AND EXISTS "${TBB_INCLUDE_DIRS}/oneapi/tbb/profiling.h")
-        set(_shiboken_clang_args "--clang-options=-include,${TBB_INCLUDE_DIRS}/oneapi/tbb/profiling.h")
+    if(DCC_TBB_INCLUDE_DIR AND EXISTS "${DCC_TBB_INCLUDE_DIR}/oneapi/tbb/profiling.h")
+        set(_shiboken_clang_args "--clang-options=-include,${DCC_TBB_INCLUDE_DIR}/oneapi/tbb/profiling.h")
     endif()
 
     add_custom_command(
@@ -782,7 +786,7 @@ function(opendcc_make_shiboken_bindings TARGET_NAME)
             "${OS_LIBRARY_ENV_NAME}=${_qt_bin}${OS_ENV_SEPARATOR}${SHIBOKEN_CLANG_INSTALL_DIR}/bin${OS_ENV_SEPARATOR}$ENV{${OS_LIBRARY_ENV_NAME}}"
             "${shiboken_bin}" "--output-directory=${_output_dir}/wrap" ${_shiboken_clang_args}
             "--project-file=${_side_config_file}"
-        DEPENDS ${_generator_dependencies})
+        DEPENDS ${_generator_dependencies} "${_side_config_file}")
 
     add_library(${TARGET_NAME} SHARED ${_headers} ${_sources} ${_generator_dependencies})
 

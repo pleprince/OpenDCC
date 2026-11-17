@@ -20,12 +20,7 @@
     #ifndef FMT_USE_WINDOWS_H
         #define FMT_USE_WINDOWS_H 0
     #endif
-
-    #include <opendcc/base/vendor/spdlog/fmt/bundled/core.h>
-    #include <opendcc/base/vendor/spdlog/fmt/bundled/ostream.h>
-    #include <opendcc/base/vendor/spdlog/fmt/bundled/printf.h>
-
+    #include <opendcc/base/vendor/spdlog/fmt/bundled/format.h>
 #else  // SPDLOG_FMT_EXTERNAL is defined - use external fmtlib
-    #include <fmt/core.h>
     #include <fmt/format.h>
 #endif

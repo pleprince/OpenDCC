@@ -97,10 +97,11 @@ bool layout_items(const QVector<NodeItem*>& items, bool vertical)
         };
 
     GVC_t* gvc = gvContext();
-    char* dummy_dot;
-    uint32_t dummy_length;
+    char* dummy_dot = nullptr;
+    size_t dummy_length = 0;
 
     gvLayout(gvc, graph, "dot");
+    // gvRenderData takes size_t* since graphviz 9; a uint32_t* rejects the call on LP64.
     auto res = gvRenderData(gvc, graph, "dot", &dummy_dot, &dummy_length);
 
     auto unflatten = run_proc(unflatten_path,

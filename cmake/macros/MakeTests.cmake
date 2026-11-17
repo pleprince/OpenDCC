@@ -17,6 +17,8 @@ function(_opendcc_register_test TEST_NAME)
     set(_runtime_paths
         "${CMAKE_INSTALL_PREFIX}/bin"
         "${CMAKE_INSTALL_PREFIX}/lib"
+        # Hydra render delegates and the USD plugins are installed under plugin/usd.
+        "${CMAKE_INSTALL_PREFIX}/plugin/usd"
         "${USD_LIBRARY_DIR}"
         "${Boost_LIBRARY_DIR_RELEASE}"
         "${TBB_INCLUDE_DIRS}/../bin"
@@ -25,15 +27,35 @@ function(_opendcc_register_test TEST_NAME)
         "$<TARGET_FILE_DIR:OpenEXR::OpenEXR>"
         ${DCC_TEST_RUNTIME_PATHS})
     list(REMOVE_DUPLICATES _runtime_paths)
+    # The embedded interpreter has to find pxr: the USD python modules live next to the USD
+    # installation, not in the environment opendcc links.
+    set(_python_paths
+        "${USD_ROOT}/lib/python"
+        "${DCC_PYTHON_INSTALL_SITE_PACKAGES_ROOT}")
+    # Plugin metadata: ar/sdf/... live in lib/usd/<lib>/resources, the Hydra delegates in
+    # plugin/usd. Both directories have to be named explicitly.
+    if(WIN32)
+        set(OS_ENV_SEPARATOR ";")
+    else()
+        set(OS_ENV_SEPARATOR ":")
+    endif()
+    set(_plugin_path "${USD_ROOT}/lib/usd${OS_ENV_SEPARATOR}${USD_ROOT}/plugin/usd${OS_ENV_SEPARATOR}${CMAKE_INSTALL_PREFIX}/plugin/usd")
     set(_launcher "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/launch_test.py")
     foreach(_path IN LISTS _runtime_paths)
         if(_path)
             list(APPEND _launcher --runtime-path "${_path}")
         endif()
     endforeach()
+    foreach(_path IN LISTS _python_paths)
+        if(_path)
+            list(APPEND _launcher --python-path "${_path}")
+        endif()
+    endforeach()
     add_test(NAME ${TEST_NAME} COMMAND ${_launcher} -- ${args_COMMAND})
+    # USD's plugin registry locates ArDefaultResolver, the file formats and the delegates through
+    # PXR_PLUGINPATH_NAME; without it the application aborts during startup.
     set_tests_properties(${TEST_NAME} PROPERTIES WORKING_DIRECTORY "${_test_dir}" TIMEOUT 120 ENVIRONMENT
-                                                 "PYTHONNOUSERSITE=1;${args_ENV}")
+                                                 "PYTHONNOUSERSITE=1;PXR_PLUGINPATH_NAME=${_plugin_path};${args_ENV}")
 endfunction()
 
 # Compile the source into its owning library and run only its named doctest suites.

@@ -10,9 +10,9 @@
 // http://mongocxx.org/mongocxx-v3/installation/
 //
 
-#include "opendcc/base/vendor/spdlog/common.h"
-#include "opendcc/base/vendor/spdlog/details/log_msg.h"
-#include "opendcc/base/vendor/spdlog/sinks/base_sink.h"
+#include <opendcc/base/vendor/spdlog/common.h>
+#include <opendcc/base/vendor/spdlog/details/log_msg.h>
+#include <opendcc/base/vendor/spdlog/sinks/base_sink.h>
 #include <opendcc/base/vendor/spdlog/details/synchronous_factory.h>
 
 #include <bsoncxx/builder/stream/document.hpp>
@@ -78,7 +78,7 @@ private:
     std::unique_ptr<mongocxx::client> client_ = nullptr;
 };
 
-#include "opendcc/base/vendor/spdlog/details/null_mutex.h"
+#include <opendcc/base/vendor/spdlog/details/null_mutex.h>
 #include <mutex>
 using mongo_sink_mt = mongo_sink<std::mutex>;
 using mongo_sink_st = mongo_sink<spdlog::details::null_mutex>;

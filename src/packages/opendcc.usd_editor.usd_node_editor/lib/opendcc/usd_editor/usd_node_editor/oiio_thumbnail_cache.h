@@ -10,6 +10,7 @@
 #include "opendcc/usd_editor/usd_node_editor/api.h"
 #include "opendcc/ui/node_editor/thumbnail_cache.h"
 #include <QCache>
+#include <memory>
 #include <mutex>
 
 OIIO_NAMESPACE_BEGIN
@@ -33,7 +34,7 @@ public:
 private:
     QCache<QString, QImage> m_cache;
     mutable std::mutex m_mutex;
-    OIIO::ImageCache* m_oiio_cache = nullptr;
+    std::shared_ptr<OIIO::ImageCache> m_oiio_cache;
 };
 
 OPENDCC_NAMESPACE_CLOSE

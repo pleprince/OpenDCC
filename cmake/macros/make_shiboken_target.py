@@ -22,7 +22,6 @@ generator-set = shiboken
 enable-pyside-extensions
 enable-parent-ctor-heuristic
 enable-return-value-heuristic
-avoid-protected-hack
 use-isnull-as-nb_nonzero
 debug-level = full
 

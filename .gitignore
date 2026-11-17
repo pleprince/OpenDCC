@@ -1,5 +1,6 @@
-build
-install_dir
+/build/
+/install_dir/
 .venv
+__pycache__/
 *.pyc
 ccache

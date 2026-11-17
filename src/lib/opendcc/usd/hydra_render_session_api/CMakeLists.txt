@@ -79,8 +79,12 @@ add_library(hydra_render_session_api SHARED ${headers} ${src})
 add_library(hydra_render_session_api_py SHARED ${headers} ${src_py})
 
 target_include_directories(
-    hydra_render_session_api PUBLIC ${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS} ${USD_INCLUDE_DIR} ${TBB_INCLUDE_DIRS}
-                                    $<BUILD_INTERFACE:${SCHEMA_SOURCES_INCLUDE_DIR}>)
+    hydra_render_session_api
+    PUBLIC $<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>
+           $<BUILD_INTERFACE:${PYTHON_INCLUDE_DIRS}>
+           $<BUILD_INTERFACE:${USD_INCLUDE_DIR}>
+           $<BUILD_INTERFACE:${TBB_INCLUDE_DIRS}>
+           $<BUILD_INTERFACE:${SCHEMA_SOURCES_INCLUDE_DIR}>)
 
 target_link_libraries(
     hydra_render_session_api

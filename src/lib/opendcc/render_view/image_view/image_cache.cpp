@@ -276,7 +276,15 @@ OIIO::ImageBuf* RenderViewInternalImageCache::acquire_image(const uint32_t key)
                 return nullptr;
             }
 
-            input->read_image(image->image_spec.format, localpixels);
+            // OpenImageIO 3 removed the (TypeDesc, void*) overload: the buffer extent has to
+            // be described, and the channel range is explicit.
+            const auto& spec = image->image_spec;
+            OIIO::image_span<std::byte> pixels(static_cast<std::byte*>(localpixels),
+                                               spec.nchannels,
+                                               spec.width,
+                                               spec.height,
+                                               spec.depth);
+            input->read_image(0, 0, 0, -1, spec.format, pixels);
             input->close();
 
             image->active = true;

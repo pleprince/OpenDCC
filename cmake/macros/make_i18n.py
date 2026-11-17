@@ -37,9 +37,28 @@ make_qm.add_argument("--output_dir", help="*.qm files output directory", require
 args = parser.parse_args()
 
 
+def find_qt_tool(qt_path, name):
+    """Locate a Qt tool that may be installed under a versioned name.
+
+    Qt 6 installs lrelease/lupdate as lrelease6/lupdate6 with the unversioned names as
+    symlinks; distributions that do not keep the symlinks (conda-forge's qt6-main) only ship
+    the versioned ones, so probe for both before failing.
+    """
+    candidates = [name, name + "6", name + "-qt6"]
+    for candidate in candidates:
+        path = os.path.join(qt_path, "bin", candidate)
+        if os.path.exists(path):
+            return path
+    raise SystemExit(
+        "cannot find {} in {} (looked for {})".format(
+            name, os.path.join(qt_path, "bin"), ", ".join(candidates)
+        )
+    )
+
+
 def generate_ts_new(qt_path, src_dir, output_dir, no_obsolete, silent, lang):
     i18n = os.path.join(output_dir, "i18n.{}.ts".format(lang))
-    lupdate = os.path.join(qt_path, "bin", "lupdate")
+    lupdate = find_qt_tool(qt_path, "lupdate")
 
     cmd = [
         lupdate,
@@ -62,7 +81,7 @@ def generate_ts_new(qt_path, src_dir, output_dir, no_obsolete, silent, lang):
 
 
 def generate_qm(qt_path, inputs, output_dir):
-    lrelease = os.path.join(qt_path, "bin", "lrelease")
+    lrelease = find_qt_tool(qt_path, "lrelease")
     for i in inputs:
         lang = i.split(".")[-2]  # assumption input is i18n.<lang>.qm
 

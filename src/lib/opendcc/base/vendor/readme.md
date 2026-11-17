@@ -26,3 +26,10 @@ https://gitlab.com/eidheim/tiny-process-library
 
 **tsl**  
 https://github.com/Tessil/robin-map
+
+**vhacd**
+https://github.com/bulletphysics/bullet3
+extracted from `Extras/VHACD` of Bullet 3.25 (bullet3-3.25), license in `vhacd/LICENSE.txt`.
+Bullet ships it without a CMake build file and the conda-forge `bullet-cpp` package does not
+install it, so the sources that `opendcc.usd_editor.bullet_physics` needs for mesh convex
+decomposition are vendored here.

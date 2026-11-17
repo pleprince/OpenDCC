@@ -69,7 +69,9 @@ namespace
     class ThumbnailLoaderTask : public QRunnable
     {
     public:
-        ThumbnailLoaderTask(OIIO::ImageCache* oiio_cache, OIIOThumbnailCache* cache, const QString& file_path)
+        ThumbnailLoaderTask(std::shared_ptr<OIIO::ImageCache> oiio_cache,
+                            OIIOThumbnailCache* cache,
+                            const QString& file_path)
         {
             m_cache = cache;
             m_file_path = file_path;
@@ -89,7 +91,8 @@ namespace
                     return;
             }
 
-            OIIO::ImageBuf img_buf_src(image_path.toLocal8Bit().toStdString(), m_oiio_cache);
+            // OpenImageIO 3 hands out and takes an ImageCache as a shared_ptr.
+            OIIO::ImageBuf img_buf_src(image_path.toLocal8Bit().toStdString(), 0, 0, m_oiio_cache);
 
             const bool read_status = img_buf_src.read(0, 0, true, OIIO::TypeDesc::UINT8);
             if (!read_status)
@@ -106,7 +109,7 @@ namespace
 
         OIIOThumbnailCache* m_cache = nullptr;
         QString m_file_path;
-        OIIO::ImageCache* m_oiio_cache = nullptr;
+        std::shared_ptr<OIIO::ImageCache> m_oiio_cache;
     };
 
 };
@@ -121,7 +124,7 @@ OIIOThumbnailCache::OIIOThumbnailCache(QObject* parent)
 OIIOThumbnailCache::~OIIOThumbnailCache()
 {
     m_cache.clear();
-    OIIO::ImageCache::destroy(m_oiio_cache);
+    m_oiio_cache.reset();
 }
 
 bool OIIOThumbnailCache::has_image(const QString& path) const

@@ -7,7 +7,7 @@
 #include <cassert>
 #include <vector>
 
-#include "opendcc/base/vendor/spdlog/common.h"
+#include <opendcc/base/vendor/spdlog/common.h>
 
 namespace spdlog {
 namespace details {
