@@ -9,7 +9,17 @@ tables below and fails when a row, column or cell it needs is missing — it nev
   applies.
 - **Building OpenUSD from source** uses the release row plus `Build platform` to create the pixi
   environment that OpenUSD and OpenDCC are both built in.
+- **A VFX Reference Platform year** (`pixi run plan -- --release 25.11 CY2025`) is a target for
+  the VFX stack: it replaces the release row's version of every stack component the platform
+  lists. `Build platform` outranks it, because it holds OpenDCC's own requirements (Qt, PySide,
+  NumPy) and a calendar year cannot put the application on a Qt no channel publishes.
+- **`OpenUSD tested versions` is a floor** on the result, whatever table supplied the version.
 - **Source-built dependencies** are compiled once per build tree with that same environment.
+
+Per dependency the plan layers the declarations, lowest precedence first — `OpenUSD releases` row,
+VFX Reference Platform year, `Build platform` — applies the `OpenUSD tested versions` floor, and
+puts `--pin`/`--python` on top. The plan report names the layer that decided every version, so
+nothing is replaced silently.
 
 ## OpenUSD releases
 
@@ -17,11 +27,11 @@ The VFX stack each OpenUSD release is built and linked against. All rows point a
 channel packages on purpose: these libraries are ABI-coupled, so a row that mixes them is not a
 row that builds.
 
-| OpenUSD | Python | Boost | TBB | OpenSubdiv | OpenImageIO | OpenColorIO | OpenEXR | Imath | MaterialX |
-| ------- | ------ | ----- | --- | ---------- | ----------- | ---------- | ------- | ----- | --------- |
-| 26.08   | 3.12   | 1.88  | 2022.3  | 3.8 | 3.1 | 2.5 | 3.4 | 3.2 | 1.39 |
-| 25.11   | 3.12   | 1.88  | 2022.3  | 3.8 | 3.1 | 2.5 | 3.4 | 3.2 | 1.39 |
-| 25.08   | 3.12   | 1.88  | 2022.3  | 3.8 | 3.1 | 2.5 | 3.4 | 3.2 | 1.39 |
+| OpenUSD | Python | Boost | TBB     | OpenSubdiv | OpenImageIO | OpenColorIO | OpenEXR | Imath | MaterialX |
+| ------- | ------ | ----- | ------- | ---------- | ----------- | ----------- | ------- | ----- | --------- |
+| 26.08   | 3.12   | 1.88  | 2022.3  | 3.8        | 3.1         | 2.5         | 3.4     | 3.2   | 1.39      |
+| 25.11   | 3.12   | 1.88  | 2022.3  | 3.8        | 3.1         | 2.5         | 3.4     | 3.2   | 1.39      |
+| 25.08   | 3.12   | 1.88  | 2022.3  | 3.8        | 3.1         | 2.5         | 3.4     | 3.2   | 1.39      |
 
 Notes on the pinned stack:
 
@@ -47,10 +57,72 @@ Notes on the pinned stack:
 - **Python is pinned exactly** whenever a specific OpenUSD build is in play: OpenDCC embeds
   Python and its bindings are ABI-tied to the interpreter OpenUSD's own bindings were built for.
 
+## OpenUSD tested versions
+
+The versions OpenUSD records as tested for each release tag, from the `Tested` table of
+`https://github.com/PixarAnimationStudios/OpenUSD/blob/v<tag>/VERSIONS.md`. A **floor, never a
+target**: no plan resolves a dependency below the version OpenUSD was tested against, and a plan
+that has to raise one above another table's version says so in its report. Where OpenUSD's own
+test platforms disagree (its table is per OS), the highest listed version is used; a cell states
+the series when the tested versions differ only in patch.
+
+| OpenUSD | Python | TBB    | OpenSubdiv | OpenImageIO | OpenColorIO | OpenEXR | MaterialX | OSL     | PySide |
+| ------- | ------ | ------ | ---------- | ----------- | ----------- | ------- | --------- | ------- | ------ |
+| 26.08   | 3.9    | 2021.9 | 3.6.1      | 2.5.16      | 2.4.2       | 3.1.13  | 1.39.5    | 1.13.11 | 6.3.1  |
+| 25.11   | 3.9    | 2021.9 | 3.6.1      | 2.5.16      | 2.2.1       | 3.1.13  | 1.39.3    | 1.13.11 | 6.3.1  |
+| 25.08   | 3.9    | 2021.9 | 3.6.0      | 2.5.16      | 2.2.1       | 3.1.13  | 1.39.3    | 1.13.11 | 6.3.1  |
+
+Not rows here, on purpose: **Embree** (OpenUSD's `hdEmbree` links 4.x, OpenDCC itself links 3.x —
+one row cannot gate both), **Ptex, Alembic, OpenVDB and Draco** (the OpenUSD build here switches
+those plugins off), and the build tools OpenUSD lists (CMake, Flex, Bison, Doxygen, Graphviz,
+Jinja2) — the `Build platform` versions are newer than what OpenUSD tested.
+
+## VFX Reference Platform
+
+The versions each VFX Reference Platform year requires,
+`https://vfxplatform.com/#reference-platform`. Cells state the series the platform calls out; `-`
+means the platform does not constrain that component.
+
+`pixi run plan -- --release <tag> CY20xx` selects one column. The year is the **target for the
+VFX stack**: it replaces the release row for every stack component it lists. `Build platform`
+outranks it — OpenDCC's own Qt, PySide and NumPy are not downgraded by a calendar year — and the
+plan report prints each component the year set, wanted and lost, so the resolution is visible
+either way. The `OpenUSD tested versions` floor still applies on top of whatever the year sets.
+
+These are the platforms as published, not as the channels here can install: those rebuild what
+they target, so a year older than CY2026 selects builds that no longer exist (OpenColorIO 2.4,
+OpenSubdiv 3.6, Qt 6.5, a Boost 1.85 compiled against an older ICU). That shows up in
+`pixi install`, one package at a time, and `--pin` moves a component off the platform there.
+
+| Component   | CY2027 | CY2026 | CY2025 | CY2024 |
+| ----------- | ------ | ------ | ------ | ------ |
+| Python      | 3.13   | 3.13   | 3.11   | 3.11   |
+| Qt          | 6.8    | 6.8    | 6.5    | 6.5    |
+| PySide      | 6.8    | 6.8    | 6.5    | 6.5    |
+| Boost       | 1.91   | 1.88   | 1.85   | 1.82   |
+| Imath       | 3.2    | 3.2    | 3.1    | 3.1    |
+| NumPy       | 2.4    | 2.3    | 1.26   | 1.24   |
+| oneTBB      | 2023   | 2022   | 2021   | -      |
+| OpenColorIO | 2.6    | 2.5    | 2.4    | 2.3    |
+| OpenEXR     | 3.5    | 3.4    | 3.3    | 3.2    |
+| OpenSubdiv  | 3.8    | 3.7    | 3.6    | 3.6    |
+
+CY2024 states Intel TBB 2020 Update 3, the legacy TBB. This build only uses oneTBB and
+`opensubdiv-gpu` pins it, so TBB is left to the other tables there rather than pinned to a package
+nothing can satisfy.
+
+The platform's remaining components are either switched off in this OpenUSD build (Alembic,
+OpenVDB, Ptex, Draco), not resolved by this build system (ACES is the `ocio-config` row below,
+FBX and oneMKL are unused), or not a dependency version at all: the C++ standard and the
+toolchain. The standard still comes from `cmake/defaults/CXXDefaults.cmake`, which compiles
+OpenDCC as C++17 — what CY2025 requires, while CY2026 and later move to C++20.
+
 ## Build platform
 
 Versions that do not follow the OpenUSD release. Same for every build on every platform, so a
-build tree only depends on which OpenUSD it was pointed at.
+build tree only depends on which OpenUSD it was pointed at. This is the lowest layer of the
+resolution: a release row and a VFX Reference Platform year both replace entries here, which is
+why the Qt pin below only holds when no platform year overrides it.
 
 | Component | Version |
 | --------- | ------- |

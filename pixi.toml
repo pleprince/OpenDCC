@@ -11,7 +11,8 @@ cmake = "4.5.*"
 ninja = "1.13.*"
 
 [tasks]
-# `pixi run <task> -- <args>`, e.g. `pixi run plan -- --usd ~/dev/usd-25.11`
+# `pixi run <task> -- <args>`, e.g. `pixi run plan -- --release 25.11` or, resolved against a
+# VFX Reference Platform year, `pixi run plan -- --release 25.11 CY2025`
 bootstrap = "python tools/build/opendcc-build bootstrap"
 probe = "python tools/build/opendcc-build probe"
 plan = "python tools/build/opendcc-build plan"

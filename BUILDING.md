@@ -56,6 +56,54 @@ pixi run install
 pixi run test                            # ctest in the build tree
 ```
 
+## Resolve against a VFX Reference Platform year
+
+```sh
+pixi run plan -- --release 25.11 CY2026                  # a year the channels still publish
+pixi run plan -- --release 25.11 CY2025                  # stack from the CY2025 column
+pixi run all  -- --release 25.11 CY2026                  # same, through to an install
+pixi run plan -- --release 25.11 CY2026 --python 3.12    # keep a local interpreter
+```
+
+The year selects a column of `VERSIONS.md`'s `VFX Reference Platform` table
+([vfxplatform.com](https://vfxplatform.com/#reference-platform)). Per dependency:
+
+1. `--pin NAME=VERSION` and `--python VERSION`, when given;
+2. `Build platform` — OpenDCC's own components (`qt`, `pyside`, `numpy`, the compilers); the year
+   never downgrades them, and the plan says when it tried;
+3. the platform year — the VFX stack: `python`, `boost`, `imath`, `tbb`, `opencolorio`, `openexr`,
+   `opensubdiv`;
+4. the `OpenUSD releases` row of the tag being built;
+5. then `OpenUSD tested versions` raises anything below what that OpenUSD release was tested
+   against (OpenUSD's own `VERSIONS.md`, per tag).
+
+The plan prints every version the year replaced as a warning that names the table it replaced,
+every component the year asked for that `Build platform` kept, and the `resolution` column of the
+plan table names the deciding table for every dependency. `--python` overrides the interpreter
+everywhere — the pixi environment, the OpenUSD build and opendcc — so a year whose Python the rest
+of the build cannot use still keeps its other pins.
+
+Four limits are deliberate:
+
+- **A year does not apply to `--usd`.** An existing OpenUSD build *is* its stack; the plan reads
+  the versions out of it rather than imposing a platform on a build that already exists.
+- **`Build platform` outranks the year.** Qt, PySide and NumPy are OpenDCC's own requirements, and
+  the year's values for them are not installable: conda-forge publishes no `qt6-multimedia` older
+  than 6.10, and PySide 6.5 is built against libclang < 16. `--pin qt=6.5.*` forces one through
+  anyway, if the channels ever provide it.
+- **The platform cannot go below OpenUSD's tested versions.** When a year pins a component below
+  what that OpenUSD release was tested against, the plan stops and names the conflict instead of
+  building off the platform; `--pin NAME=VERSION` is the explicit way out.
+- **The plan does not check whether the stack it computes is published.** The channels carry what
+  their rebuilds target, not every request: at OpenUSD 25.11 they publish OpenColorIO 2.5+,
+  OpenSubdiv 3.7+, no `qt6-multimedia` older than 6.10, and no Boost 1.85 built against an ICU that
+  Qt 6.11 accepts. CY2026 and later therefore resolve and install on top of `Build platform`;
+  CY2025 resolves but stops in `pixi install`, naming one unavailable package at a time, and
+  `--pin NAME=VERSION` is how a plan proceeds from there.
+
+The year is part of the build tree's slug (`osx-arm64-usd25.11-cy2025-src`), so two stacks for
+one OpenUSD tag never share a tree.
+
 ## Build against an existing OpenUSD
 
 ```sh
@@ -100,11 +148,11 @@ environment — for example a stack built against conda's `python` from the same
 | ---- | ------------ |
 | `pixi run bootstrap` | install pixi for the current user if needed |
 | `pixi run probe -- --usd <prefix>` | report an OpenUSD build: version, Python, bundled dependencies |
-| `pixi run plan -- (--usd <prefix> \| --release <tag>)` | extract the dependency set, write and install the environment, print the plan, verify it |
+| `pixi run plan -- (--usd <prefix> \| --release <tag> [CY20xx])` | extract the dependency set, write and install the environment, print the plan, verify it |
 | `pixi run deps` | build the dependencies pixi does not package (Qt Advanced Docking System, sentry-native, OpenMesh, libigl) |
-| `pixi run usd -- --release <tag>` | build OpenUSD from source into the build tree |
+| `pixi run usd -- --release <tag> [CY20xx]` | build OpenUSD from source into the build tree |
 | `pixi run configure` / `build` / `install` / `test` | the opendcc CMake build |
-| `pixi run all -- (--usd <prefix> \| --release <tag>)` | everything above in order |
+| `pixi run all -- (--usd <prefix> \| --release <tag> [CY20xx])` | everything above in order |
 | `pixi run clean` | remove a build tree (`--keep-env` keeps the environment and deps) |
 
 Every task that needs a build tree uses the only one under `build/`; with several, pass
@@ -114,11 +162,12 @@ Overrides for one-off experiments:
 
 ```sh
 pixi run plan -- --release 25.11 --pin tbb=2021.12 --option DCC_BUILD_TESTS=OFF
+pixi run plan -- --release 25.11 CY2025 --python 3.12
 ```
 
-`--pin` changes a pixi package version (the reason is printed in the plan), `--option` changes a
-CMake option of the opendcc build. Permanent changes belong in `VERSIONS.md` or in the defaults
-in `tools/build/opendcc_build/plan.py`.
+`--pin` changes a pixi package version, `--python` changes the interpreter everywhere, `--option`
+changes a CMake option of the opendcc build (the reason is printed in the plan). Permanent changes
+belong in `VERSIONS.md` or in the defaults in `tools/build/opendcc_build/plan.py`.
 
 ## What a build tree looks like
 
@@ -146,14 +195,16 @@ Per dependency, in this order:
 1. **OpenUSD carries it** (it ships a CMake package for it) → link OpenUSD's copy. These are the
    ABI-coupled libraries; two copies in one process is the failure mode this rule exists to
    prevent.
-2. **pixi packages it** → install it, pinned to the `VERSIONS.md` version (from scratch) or to the
-   version OpenUSD recorded (existing build). A fully qualified version is pinned exactly.
+2. **pixi packages it** → install it, pinned to the version the declaration layers resolve (see
+   "Resolve against a VFX Reference Platform year") or to the version OpenUSD recorded (existing
+   build). A fully qualified version is pinned exactly; a series (`3.6`) is pinned as `3.6.*`.
 3. **pixi does not package it** → build it once into `build/<slug>/deps` from the source in
    `VERSIONS.md`. Qt Advanced Docking System, sentry-native, OpenMesh and libigl are here
    because conda-forge has no `osx-arm64` build of the first three.
 4. **Nothing declares a version** → the plan stops and names the dependency.
 
-`pixi run plan` prints the resulting table (`dependency`, `provider`, `version`, `origin`) and a
+`pixi run plan` prints the resulting table (`dependency`, `provider`, `version`, `origin`,
+`resolution` — the last one names the table or option that decided the version) and a
 verification table comparing the pins with what pixi installed.
 
 ## Running an install

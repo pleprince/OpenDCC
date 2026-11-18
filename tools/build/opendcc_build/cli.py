@@ -65,13 +65,7 @@ def _parser() -> argparse.ArgumentParser:
         help="extract the dependency set, create and install the pixi environment",
     )
     _target_arguments(plan)
-    plan.add_argument(
-        "--pin",
-        action="append",
-        default=[],
-        metavar="NAME=VERSION",
-        help="override one dependency version (repeatable), e.g. --pin tbb=2021.12",
-    )
+    _dependency_arguments(plan)
     plan.add_argument(
         "--option",
         action="append",
@@ -87,6 +81,7 @@ def _parser() -> argparse.ArgumentParser:
 
     usd = sub.add_parser("usd", help="build OpenUSD from a release tag")
     _target_arguments(usd)
+    _dependency_arguments(usd)
     usd.add_argument("-j", "--jobs", type=int, help="parallel compile jobs")
     usd.set_defaults(func=_usd)
 
@@ -126,11 +121,9 @@ def _parser() -> argparse.ArgumentParser:
         "all", help="plan, dependencies, OpenUSD (when --release), configure, build, install"
     )
     _target_arguments(all_cmd)
+    _dependency_arguments(all_cmd, hidden=True)
     all_cmd.add_argument("-j", "--jobs", type=int, help="parallel compile jobs")
     all_cmd.add_argument("--no-tests", action="store_true", help="skip the ctest run")
-    all_cmd.add_argument(
-        "--pin", action="append", default=[], metavar="NAME=VERSION", help=argparse.SUPPRESS
-    )
     all_cmd.add_argument(
         "--option", action="append", default=[], metavar="DCC_OPTION=VALUE", help=argparse.SUPPRESS
     )
@@ -148,8 +141,37 @@ def _parser() -> argparse.ArgumentParser:
 
 def _target_arguments(parser: argparse.ArgumentParser) -> None:
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--usd", help="OpenUSD install prefix to build against")
-    group.add_argument("--release", help="OpenUSD release tag to build from source, e.g. 25.11")
+    group.add_argument(
+        "--usd", help="OpenUSD install prefix to build against (its stack is read from that build)"
+    )
+    group.add_argument(
+        "--release",
+        nargs="+",
+        metavar="TAG|CY",
+        help="OpenUSD release tag to build from source, optionally followed by a VFX Reference "
+        "Platform year: --release 25.11 CY2025",
+    )
+
+
+def _dependency_arguments(parser: argparse.ArgumentParser, hidden: bool = False) -> None:
+    parser.add_argument(
+        "--pin",
+        action="append",
+        default=[],
+        metavar="NAME=VERSION",
+        help=argparse.SUPPRESS
+        if hidden
+        else "override one dependency version (repeatable), a pixi spec: --pin tbb=2021.12, "
+        "--pin qt=6.5.*, --pin opencolorio==2.5.2",
+    )
+    parser.add_argument(
+        "--python",
+        metavar="VERSION",
+        help=argparse.SUPPRESS
+        if hidden
+        else "override the Python version everywhere -- environment, OpenUSD build and "
+        "opendcc -- instead of the one the release row or platform year resolves",
+    )
 
 
 def _build_argument(parser: argparse.ArgumentParser) -> None:
@@ -287,6 +309,32 @@ def _versions() -> versions_mod.Versions:
     return versions_mod.parse(path)
 
 
+def _release_and_platform(args: argparse.Namespace) -> tuple[str | None, str | None]:
+    """Split ``--release <tag> [CY20xx]`` into an OpenUSD tag and a VFX platform year."""
+    tokens = list(getattr(args, "release", None) or [])
+    tag: str | None = None
+    vfx: str | None = None
+    for token in tokens:
+        if versions_mod.is_vfx_year(token):
+            if vfx is not None:
+                raise planner.PlanError(
+                    "--release takes one VFX Reference Platform year, got " + ", ".join(tokens)
+                )
+            vfx = versions_mod.normalize_vfx(token)
+            continue
+        if tag is not None:
+            raise planner.PlanError(
+                "--release takes one OpenUSD tag and one platform year, got "
+                + ", ".join(tokens)
+            )
+        tag = token
+    if tokens and tag is None:
+        raise planner.PlanError(
+            "--release needs an OpenUSD tag (e.g. 25.11), got " + ", ".join(tokens)
+        )
+    return tag, vfx
+
+
 def _make_and_install(args: argparse.Namespace) -> planner.Plan:
     versions = _versions()
     options: dict[str, str] = {}
@@ -301,19 +349,31 @@ def _make_and_install(args: argparse.Namespace) -> planner.Plan:
         if not key or not value:
             raise planner.PlanError(f"--pin needs NAME=VERSION, got {item!r}")
         pins[key] = value
+    release, vfx = _release_and_platform(args)
 
     pixi.ensure()
     plan = planner.make_plan(
         ROOT,
         versions,
         usd=Path(args.usd) if args.usd else None,
-        release=args.release,
+        release=release,
+        vfx=vfx,
+        python=getattr(args, "python", None),
         options=options,
         pin_overrides=pins,
     )
     plan.env_dir.mkdir(parents=True, exist_ok=True)
     plan.manifest.write_text(planner.render_manifest(plan))
-    pixi.install(plan.manifest)
+    try:
+        pixi.install(plan.manifest)
+    except pixi.PixiError as error:
+        hint = (
+            f"\nA {plan.vfx} version may not be published for {plan.platform}: --pin "
+            f"NAME=VERSION takes one component off the platform, e.g. --pin opencolorio=2.5."
+            if plan.vfx
+            else ""
+        )
+        raise planner.PlanError(f"{error}{hint}") from None
     planner.check_python_abi(plan)
     state.save(plan)
     return plan
@@ -333,11 +393,12 @@ def _record_built_usd(plan: planner.Plan, prefix: Path) -> None:
     for warning in usd_probe.validate(result):
         plan.warnings.append(warning)
     drift = [
-        f"{name}: VERSIONS.md {plan.resolved.get(name, '?')} vs USD {version}"
+        f"{name}: {plan.origins.get(name, 'VERSIONS.md')} says {plan.resolved.get(name, '?')} "
+        f"vs USD {version}"
         for name, version in result.bundled.items()
         if name in plan.resolved and not version.startswith(plan.resolved[name].rstrip(".*"))
     ]
-    plan.warnings.extend(f"OpenUSD disagrees with VERSIONS.md: {row}" for row in drift)
+    plan.warnings.extend(f"OpenUSD disagrees with the plan: {row}" for row in drift)
     planner.check_python_abi(plan)
     state.save(plan)
 
@@ -349,6 +410,7 @@ def _report(plan: planner.Plan) -> None:
             ("platform", plan.platform),
             ("build tree", str(plan.build_dir)),
             ("OpenUSD", f"{plan.release} ({'from source' if plan.from_source else plan.usd_prefix})"),
+            ("vfx platform", plan.vfx or "-"),
             ("environment", str(plan.env_dir)),
             ("install prefix", str(plan.install_dir)),
         ],
@@ -356,7 +418,8 @@ def _report(plan: planner.Plan) -> None:
     )
     print()
     _print_table(
-        planner.describe(plan), ("dependency", "provider", "version", "origin")
+        planner.describe(plan),
+        ("dependency", "provider", "version", "origin", "resolution"),
     )
     print()
     rows = planner.verify(plan)
