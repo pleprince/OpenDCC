@@ -229,9 +229,11 @@ in the environment, and reproduce on any build of this commit:
   build passes `CMAKE_POLICY_VERSION_MINIMUM=3.5` for that reason.
 - **GL debug annotations** (`glPushDebugGroup`) are OpenGL 4.3 entry points; macOS stops at 4.1
   and the API loader leaves them null, so `GLScopedDebugGroup` makes them a no-op when absent.
-- **graphviz package**: conda-forge keeps the plugin libraries in `lib/graphviz`, which the
-  package flattens into its own `lib`. A few names in its `package.toml` are Windows-only
-  (`libgvplugin_gdiplus`) and are reported as load failures on macOS; the package still works.
+- **graphviz package**: conda-forge keeps the plugin libraries in `lib/graphviz`, one level
+  below the rest, and their `LC_RPATH` is `@loader_path/..` — correct only in that directory, so
+  the package keeps the distribution's layout and `package.unix.toml` names them there. Do not
+  move a signed dylib out of its directory: `install_name_tool` invalidates the ad-hoc signature
+  and dyld kills the process with `SIGKILL (Code Signature Invalid)`.
 - **Reconfiguring from scratch**: `pixi run clean` (or delete `build/<slug>`). Deleting only
   `build/<slug>/cmake` keeps the environment and the source-built dependencies.
 

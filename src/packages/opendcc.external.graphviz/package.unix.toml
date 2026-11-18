@@ -12,28 +12,25 @@ path='lib/${LIB_PREFIX}cgraph${LIB_EXT}'
 path='lib/${LIB_PREFIX}gvc${LIB_EXT}'
 
 [[native.load]]
-path='lib/${LIB_PREFIX}gvplugin_core${LIB_EXT}'
+path='lib/graphviz/${LIB_PREFIX}gvplugin_core${LIB_EXT}'
 
 [[native.load]]
-path='lib/${LIB_PREFIX}gvplugin_dot_layout${LIB_EXT}'
+path='lib/graphviz/${LIB_PREFIX}gvplugin_dot_layout${LIB_EXT}'
 
 [[native.load]]
-path='lib/${LIB_PREFIX}gvplugin_gdiplus${LIB_EXT}'
+path='lib/graphviz/${LIB_PREFIX}gvplugin_neato_layout${LIB_EXT}'
 
 [[native.load]]
-path='lib/${LIB_PREFIX}gvplugin_neato_layout${LIB_EXT}'
+path='lib/graphviz/${LIB_PREFIX}gvplugin_pango${LIB_EXT}'
 
 [[native.load]]
-path='lib/${LIB_PREFIX}gvplugin_pango${LIB_EXT}'
+path='lib/${LIB_PREFIX}pango-1.0${LIB_EXT}'
 
 [[native.load]]
-path='lib/${LIB_PREFIX}pango-1${LIB_EXT}'
+path='lib/${LIB_PREFIX}pangocairo-1.0${LIB_EXT}'
 
 [[native.load]]
-path='lib/${LIB_PREFIX}pangocairo-1${LIB_EXT}'
-
-[[native.load]]
-path='lib/${LIB_PREFIX}pangoft2-1${LIB_EXT}'
+path='lib/${LIB_PREFIX}pangoft2-1.0${LIB_EXT}'
 
 [[native.load]]
 path='lib/${LIB_PREFIX}pathplan${LIB_EXT}'

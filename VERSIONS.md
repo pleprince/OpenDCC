@@ -37,6 +37,13 @@ Notes on the pinned stack:
 - **OpenImageIO stays on 3.1** because OpenShadingLanguage 1.15 (which OpenDCC links) is built
   against it. OpenImageIO 3.2 requires OpenColorIO 2.5 `>=2.5.1,<2.6` *and* OpenEXR 3.5, which
   no single channel build of OSL 1.15 accepts.
+- **Qt is held at 6.11.0**: 6.11.1 regressed `QImage::toCGImage()` (QTBUG-147602) — the returned
+  `CGImageFormat` holds a color space that is released before use — so any cursor whose image
+  carries an ICC profile (the toolbar's resize handle, the wait cursor) aborts the application on
+  the first hover. 6.11.0 predates that commit and is fixed in 6.11.2, but 6.11.2 cannot be
+  installed next to the GPU OpenSubdiv build: its `qt6-multimedia` requires ffmpeg 9, whose
+  conda builds require OpenVINO 2026.3, whose TBB floor of 2023 excludes the
+  `opensubdiv-gpu` 3.8 build that pins TBB 2022.3. Revisit when OpenSubdiv's TBB pin moves.
 - **Python is pinned exactly** whenever a specific OpenUSD build is in play: OpenDCC embeds
   Python and its bindings are ABI-tied to the interpreter OpenUSD's own bindings were built for.
 
@@ -47,8 +54,8 @@ build tree only depends on which OpenUSD it was pointed at.
 
 | Component | Version |
 | --------- | ------- |
-| Qt        | 6.11    |
-| PySide    | 6.11    |
+| Qt        | 6.11.0  |
+| PySide    | 6.11.0  |
 | Clang     | 23.1    |
 | CMake     | 4.5     |
 | Ninja     | 1.13    |
