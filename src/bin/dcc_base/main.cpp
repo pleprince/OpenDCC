@@ -34,6 +34,7 @@
 #include <QSurfaceFormat>
 #include <QCommandLineParser>
 #include <QHostInfo>
+#include <QLibraryInfo>
 
 #include <iostream>
 #include <algorithm>
@@ -192,6 +193,13 @@ void release_resources()
 
 int main(int argc, char* argv[])
 {
+    // The install links Qt from the build environment: the libraries are copied next to the
+    // binaries, the plugins are not. Qt knows where its own plugins live, so ask it instead of
+    // requiring QT_PLUGIN_PATH from a wrapper script -- without it QApplication aborts because
+    // it cannot find the platform plugin.
+    if (qEnvironmentVariableIsEmpty("QT_PLUGIN_PATH"))
+        qputenv("QT_PLUGIN_PATH", QLibraryInfo::path(QLibraryInfo::PluginsPath).toLocal8Bit());
+
     QCommandLineParser parser;
     parser.addPositionalArgument("stage", "stage path to open on start");
     QCommandLineOption shell_option("shell", "init python shell");

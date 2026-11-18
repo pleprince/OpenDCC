@@ -13,6 +13,7 @@
 #include <QStyleFactory>
 #include <QDir>
 #include <QHostInfo>
+#include <QLibraryInfo>
 
 #ifdef USE_SENTRY
 #include <sentry.h>
@@ -22,6 +23,13 @@
 
 int main(int argc, char *argv[])
 {
+    // The install links Qt from the build environment: the libraries are copied next to the
+    // binaries, the plugins are not. Qt knows where its own plugins live, so ask it instead of
+    // requiring QT_PLUGIN_PATH from a wrapper script -- without it QApplication aborts because
+    // it cannot find the platform plugin.
+    if (qEnvironmentVariableIsEmpty("QT_PLUGIN_PATH"))
+        qputenv("QT_PLUGIN_PATH", QLibraryInfo::path(QLibraryInfo::PluginsPath).toLocal8Bit());
+
     // Enable High DPI scaling
     // Remove this code after migrating to Qt6
     QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);

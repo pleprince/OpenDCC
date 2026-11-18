@@ -158,18 +158,29 @@ verification table comparing the pins with what pixi installed.
 
 ## Running an install
 
-The install links Qt, OpenUSD and the build environment's libraries; it does not copy them, and
-the binaries carry no rpath. Source the generated environment script before running anything from
-`install_dir`:
+The installed binaries run on their own:
 
 ```sh
-source install_dir/osx-arm64-usd25.11-src/opendcc-env.sh
 install_dir/osx-arm64-usd25.11-src/bin/dcc_base
 ```
 
-The script exports the library paths (`DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH`, `PATH`,
-`PYTHONPATH`) and `PXR_PLUGINPATH_NAME`, which has to name both `<usd>/lib/usd` (ar, sdf, the file
-formats) and `<usd>/plugin/usd` (Hydra delegates).
+Three things make that work, and none of them needs a wrapper script:
+
+- **rpath**: the executables and libraries carry `@loader_path/../lib` (and `../plugin/usd`), so
+  they find `libopendcc_*` and the Hydra delegates next to themselves.
+- **install carries what the process loads at runtime**: `DCC_INSTALL_USD=ON` copies OpenUSD's
+  libraries, its `lib/usd` plugin metadata, `lib/python/pxr` and `plugin/usd`;
+  `DCC_INSTALL_QT_PLUGINS=ON` copies Qt's plugin directory to `lib/qt6/plugins`. USD and Qt read
+  their plugin search path once per process, from the environment, at library-initialization
+  time -- before `main()` -- so `Application` registers `lib/usd`/`plugin/usd` with `PlugRegistry`
+  and sets `QT_PLUGIN_PATH` from `QLibraryInfo` when the variable is not already set.
+- **python path**: the embedded interpreter prepends `<install>/lib/python` and
+  `<install>/lib/python<major>.<minor>/site-packages`, so `pxr` and `opendcc` import without
+  `PYTHONPATH`.
+
+`opendcc-env.sh` is still generated (and `DCC_INSTALL_*` off still produces a tree that needs it),
+but it is no longer required: it exists for running a build tree's install alongside other tools
+and for the case where the libraries are not all inside the prefix.
 
 Python is the build environment's interpreter: `DCC_EMBEDDED_PYTHON_HOME` is `OFF`, so the
 application does not point `PYTHONHOME` at an install prefix that has no standard library in it.

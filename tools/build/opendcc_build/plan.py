@@ -83,6 +83,12 @@ DEPS: tuple[Dep, ...] = (
     Dep("ninja", ("ninja",)),
     # Imported by OpenUSD's usdGenSchema, which the build runs with this environment's python.
     Dep("jinja2", ("jinja2",)),
+    # Imported by opendcc's python packages (src/python, src/packages): six and Qt.py by the
+    # panels/menus, pygments by the script editor, numpy by the bullet physics UI.
+    Dep("six", ("six",)),
+    Dep("pygments", ("pygments",)),
+    Dep("qt.py", ("qt.py",)),
+    Dep("numpy", ("numpy",)),
     # Built from source into the plan's deps prefix (see VERSIONS.md, Source-built dependencies).
     Dep("qtads", None),
     Dep("sentry", None),
@@ -127,6 +133,13 @@ DEFAULT_OPTIONS = {
     # with SENTRY_BACKEND=crashpad. The pinned source build is backend-less (no channel
     # publishes a crashpad one), so the handler is not there to install.
     "DCC_INSTALL_SENTRY": "OFF",
+    # Copies OpenUSD's plugin metadata (lib/usd), its python modules (lib/python/pxr) and the
+    # Hydra delegates (plugin/usd) into the install, next to the USD libraries the dependency
+    # walk already copies. Without it an install links USD from the build tree while its plugin
+    # metadata points there too, and the two copies of libusd_* in one process abort on
+    # duplicate TfDebug symbols.
+    "DCC_INSTALL_USD": "ON",
+    "DCC_INSTALL_QT_PLUGINS": "ON",
     "DCC_USE_PYTHON_3": "ON",
     # OFF keeps the application from pointing PYTHONHOME at the install prefix: this install has
     # no bundled standard library, it runs on the interpreter of the build environment (see
@@ -398,7 +411,9 @@ def render_manifest(plan: Plan) -> str:
     ]
     for name in sorted(plan.pins):
         for package in _pixi_packages(name):
-            lines.append(f'{package} = "{plan.pins[name]}"')
+            # Quoted keys: a package name may contain a dot ("qt.py"), which an unquoted TOML
+            # key would read as a table path.
+            lines.append(f'"{package}" = "{plan.pins[name]}"')
     if plan.compiler_deps:
         lines.append("")
         lines.append(f"[target.{plan.platform}.dependencies]")
@@ -506,6 +521,12 @@ def cmake_cache(plan: Plan) -> dict[str, str]:
         "Python3_EXECUTABLE": str(plan.python),
         "PYTHON_EXECUTABLE": str(plan.python),
     }
+    if not plan.platform.startswith("win"):
+        # The install is not self-contained: its libraries sit next to the binaries and OpenUSD,
+        # the source-built dependencies and the environment live outside it. Without an rpath the
+        # installed binaries only run through opendcc-env.sh; with it they run on their own.
+        cache["CMAKE_INSTALL_RPATH"] = "@loader_path/../lib;@loader_path/../plugin/usd" if plan.platform.startswith("osx") else "$ORIGIN/../lib;$ORIGIN/../plugin/usd"
+        cache["CMAKE_INSTALL_RPATH_USE_LINK_PATH"] = "ON"
     if plan.probe is not None and plan.probe.lib_prefix != "lib":
         # find_package(USD) locates <usd>/lib through <prefix>usd<shared suffix>.
         cache["PXR_LIB_PREFIX"] = plan.probe.lib_prefix

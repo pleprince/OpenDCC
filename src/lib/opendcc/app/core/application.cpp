@@ -7,6 +7,7 @@
 #include "opendcc/app/core/application.h"
 
 #include "opendcc/base/defines.h"
+#include "opendcc/base/utils/env.h"
 #include "opendcc/base/utils/process.h"
 #include "opendcc/base/app_version.h"
 #include "opendcc/base/ipc_commands_api/server.h"
@@ -320,6 +321,15 @@ Application::Application()
 
     m_application_root_path = base_dir.path().toStdString();
     qputenv("DCC_LOCATION", base_dir.path().toStdString().c_str());
+
+    // USD resolves its plugin search path once per process, during library initialization and
+    // therefore before main(): PXR_PLUGINPATH_NAME from the environment only works if it is set
+    // before the process starts. Registering the directories explicitly is what makes an install
+    // run on its own -- <root>/lib/usd carries ar/sdf/the file formats, <root>/plugin/usd the
+    // Hydra delegates. Nothing here names a build-time path.
+    PlugRegistry::GetInstance().RegisterPlugins(m_application_root_path + "/lib/usd");
+    PlugRegistry::GetInstance().RegisterPlugins(m_application_root_path + "/plugin/usd");
+
     auto mtlx_path = base_dir;
     mtlx_path.cd("materialx/libraries");
     auto mtlx_stdlib_search = qEnvironmentVariable("PXR_MTLX_STDLIB_SEARCH_PATHS");
@@ -382,8 +392,6 @@ Application::Application()
 
 void Application::initialize_extensions()
 {
-    PlugRegistry::GetInstance().RegisterPlugins(Application::instance().get_application_root_path() + "/plugin/usd");
-
     auto dcc_plugins = PlugRegistry::GetInstance().RegisterPlugins(Application::instance().get_application_root_path() + "/plugin/opendcc");
     for (auto& plugin : dcc_plugins)
     {

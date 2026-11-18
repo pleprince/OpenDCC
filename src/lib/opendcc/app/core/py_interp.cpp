@@ -109,6 +109,25 @@ namespace
 #endif
                 PySys_SetArgv(1, empty);
 
+                // An install carries OpenUSD's python modules (lib/python/pxr, copied by
+                // DCC_INSTALL_USD) and its own packages (lib/python<major>.<minor>/site-packages).
+                // Both are relative to the application root, so nothing here depends on where the
+                // install lives or on PYTHONPATH being set by a wrapper script.
+                const auto root = Application::instance().get_application_root_path();
+                const auto python_dir = root + "/lib/python";
+                const auto site_packages = python_dir + std::to_string(PY_MAJOR_VERSION) + "." +
+                                           std::to_string(PY_MINOR_VERSION) + "/site-packages";
+                if (PyObject* const path = PySys_GetObject("path"))
+                {
+                    for (const auto* entry : { &site_packages, &python_dir })
+                    {
+                        PyObject* const item = PyUnicode_FromString(entry->c_str());
+                        if (item != nullptr)
+                            PyList_Insert(path, 0, item);
+                        Py_XDECREF(item);
+                    }
+                }
+
                 // Kick the module loading mechanism for any loaded libs that have
                 // corresponding python binding modules.  We do this after we've
                 // published that we're done initializing as this may reenter

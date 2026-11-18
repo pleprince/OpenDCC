@@ -57,6 +57,10 @@ HEADERS = {
     "libigl": "libigl",
     "openmesh": "openmesh",
     "jinja2": "jinja2",
+    "six": "six",
+    "pygments": "pygments",
+    "qt.py": "qt.py",
+    "numpy": "numpy",
 }
 
 

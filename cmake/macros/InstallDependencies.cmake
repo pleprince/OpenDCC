@@ -1,4 +1,8 @@
 option(DCC_INSTALL_QT5 "" OFF)
+# Qt resolves its plugins relative to its own libraries. The dependency walk copies the libraries
+# next to the binaries but not the plugins, so an install that links Qt from the build environment
+# has to carry them too -- otherwise QApplication cannot find the platform plugin.
+option(DCC_INSTALL_QT_PLUGINS "Copy Qt's plugin directory into the install" OFF)
 option(DCC_INSTALL_ADS "" ON)
 option(DCC_INSTALL_PYTHON "" OFF)
 option(DCC_INSTALL_PYTHON_DEPS "" OFF)
@@ -757,6 +761,41 @@ if(WIN32)
 else()
     install(
         CODE "file(INSTALL ${INSTALL_SHARED_LIBS} DESTINATION \"${CMAKE_INSTALL_PREFIX}/lib\" FOLLOW_SYMLINK_CHAIN)")
+endif()
+
+if(DCC_INSTALL_USD)
+    # USD loads part of its libraries by name at runtime (hdGp, hioOpenVDB, the validators), so
+    # the dependency walk never sees them. Copy the whole set: they all come from the OpenUSD
+    # build the application links, and its plugin metadata refers to them by name.
+    if(APPLE)
+        file(GLOB _usd_plugin_libs "${USD_LIBRARY_DIR}/libusd_*.dylib")
+    elseif(UNIX)
+        file(GLOB _usd_plugin_libs "${USD_LIBRARY_DIR}/libusd_*.so")
+    else()
+        file(GLOB _usd_plugin_libs "${USD_LIBRARY_DIR}/usd_*.dll")
+    endif()
+    if(_usd_plugin_libs)
+        install(CODE "file(INSTALL ${_usd_plugin_libs} DESTINATION \"${CMAKE_INSTALL_PREFIX}/lib\" FOLLOW_SYMLINK_CHAIN)")
+    endif()
+endif()
+
+if(DCC_INSTALL_QT_PLUGINS)
+    get_target_property(_qt_core_lib Qt${QT_VERSION_MAJOR}::Core LOCATION)
+    get_filename_component(_qt_core_dir ${_qt_core_lib} DIRECTORY)
+    # A from-source Qt installs the plugins under <prefix>/plugins, conda-forge's qt6-main under
+    # <prefix>/lib/qt6/plugins. QLibraryInfo reports the same directory at run time, so the install
+    # mirrors that layout.
+    foreach(_qt_plugins "${_qt_core_dir}/qt${QT_VERSION_MAJOR}/plugins" "${_qt_core_dir}/../plugins")
+        if(IS_DIRECTORY "${_qt_plugins}")
+            get_filename_component(_qt_plugins "${_qt_plugins}" ABSOLUTE)
+            install(
+                DIRECTORY "${_qt_plugins}/"
+                DESTINATION "lib/qt${QT_VERSION_MAJOR}/plugins"
+                USE_SOURCE_PERMISSIONS
+                PATTERN "*.dSYM" EXCLUDE)
+            break()
+        endif()
+    endforeach()
 endif()
 
 install(

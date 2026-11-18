@@ -58,6 +58,10 @@ build tree only depends on which OpenUSD it was pointed at.
 | Graphviz  | 14.1    |
 | doctest   | 2.5     |
 | fmt       | 12.2    |
+| six       | 1.17    |
+| Pygments  | 2.20    |
+| Qt.py     | 2.0     |
+| NumPy     | 2.5     |
 | Bullet    | 3.25    |
 | Embree    | 3.13    |
 | Embree 4  | 4.4     |
