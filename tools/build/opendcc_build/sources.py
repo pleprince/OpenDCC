@@ -107,7 +107,7 @@ def _provision_one(
         "Ninja",
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DCMAKE_INSTALL_PREFIX={plan.deps_prefix}",
-        f"-DCMAKE_PREFIX_PATH={plan.env_prefix}",
+        f"-DCMAKE_PREFIX_PATH={plan.env_cmake_prefix}",
         f"-DPython3_EXECUTABLE={plan.python}",
     ]
     cmake += _component_options(name, component, plan)

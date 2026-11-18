@@ -38,20 +38,24 @@ args = parser.parse_args()
 
 
 def find_qt_tool(qt_path, name):
-    """Locate a Qt tool that may be installed under a versioned name.
+    """Locate a Qt tool that may be installed under a versioned name or in a lib/qt6 subdir.
 
     Qt 6 installs lrelease/lupdate as lrelease6/lupdate6 with the unversioned names as
-    symlinks; distributions that do not keep the symlinks (conda-forge's qt6-main) only ship
-    the versioned ones, so probe for both before failing.
+    symlinks; distributions that do not keep the symlinks (conda-forge's qt6-main on macOS)
+    only ship the versioned ones, and its Windows build puts the tools under lib/qt6/bin with
+    an .exe suffix. Probe every combination before failing.
     """
-    candidates = [name, name + "6", name + "-qt6"]
-    for candidate in candidates:
-        path = os.path.join(qt_path, "bin", candidate)
-        if os.path.exists(path):
-            return path
+    suffixes = [".exe", ""] if os.name == "nt" else [""]
+    directories = ["bin", os.path.join("lib", "qt6", "bin"), os.path.join("lib", "qt6")]
+    for directory in directories:
+        for candidate in (name, name + "6", name + "-qt6"):
+            for suffix in suffixes:
+                path = os.path.join(qt_path, directory, candidate + suffix)
+                if os.path.exists(path):
+                    return path
     raise SystemExit(
-        "cannot find {} in {} (looked for {})".format(
-            name, os.path.join(qt_path, "bin"), ", ".join(candidates)
+        "cannot find {} under {} (looked in {})".format(
+            name, qt_path, ", ".join(os.path.join(qt_path, d) for d in directories)
         )
     )
 

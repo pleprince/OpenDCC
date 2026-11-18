@@ -64,13 +64,15 @@ def write_environment_script(plan: Plan, verbose: bool = True) -> None:
         plan.install_dir / "plugin" / "usd",
         plan.usd_prefix / "lib",
         plan.deps_prefix / "lib",
-        plan.env_prefix / "lib",
+        plan.env_cmake_prefix / "lib",
     ]
     path_bits = [
         plan.install_dir / "bin",
+        # A Windows OpenUSD installs its DLLs next to the import libraries, not in bin/.
+        plan.usd_prefix / "lib",
         plan.usd_prefix / "bin",
         plan.deps_prefix / "bin",
-        plan.env_prefix / "bin",
+        plan.env_cmake_prefix / "bin",
     ]
     python_bits = [plan.usd_prefix / "lib" / "python"]
     # USD plugin metadata: ar/sdf/... live in lib/usd/<lib>/resources, the Hydra delegates and
@@ -159,6 +161,7 @@ def toolchain_environment() -> dict[str, str]:
     env = dict(os.environ)
     if not plan_platform_is_windows():
         return env
+    _ensure_utf8_sources(env)
     if shutil.which("cl"):
         return env
 
@@ -206,6 +209,18 @@ def toolchain_environment() -> dict[str, str]:
             if key and value:
                 env[key] = value
     return env
+
+
+def _ensure_utf8_sources(env: dict[str, str]) -> None:
+    """Ask MSVC to compile as UTF-8.
+
+    Third-party CMake builds (OpenUSD, the source dependencies) initialize their flag cache
+    from the environment. OpenImageIO 3.1 vendors fmt, whose headers static_assert that the
+    literal encoding is UTF-8, so every translation unit that includes its headers needs it.
+    """
+    for name in ("CFLAGS", "CXXFLAGS"):
+        if "/utf-8" not in env.get(name, ""):
+            env[name] = f"{env.get(name, '')} /utf-8".strip()
 
 
 def plan_platform_is_windows() -> bool:

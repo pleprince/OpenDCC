@@ -6,6 +6,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
     set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD ON)
+    # UTF-8 source and execution character set. OpenImageIO 3.1 vendors fmt, whose headers
+    # static_assert that the literal encoding is UTF-8 on Windows, and any translation unit
+    # that includes an OpenImageIO header (directly or through another dependency) fails
+    # without this.
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8")
     # disable USD warnings truncation from 'double' to 'float' due to matrix and vector classes in `Gf`
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4244")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4305")

@@ -42,7 +42,9 @@ def save(plan: Plan) -> Path:
 
 def load(path: Path) -> tuple[Plan, Path]:
     """Load a plan from a state file or from a build directory containing one."""
-    state_file = Path(path)
+    # Resolve first: every prefix the plan derives hangs off this path, and a relative one would
+    # end up in the generated environment script and in the CMake cache.
+    state_file = Path(path).expanduser().resolve()
     if state_file.is_dir():
         state_file = state_file / "state.json"
     if not state_file.is_file():

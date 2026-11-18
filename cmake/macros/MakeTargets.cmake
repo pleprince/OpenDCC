@@ -25,9 +25,11 @@ function(get_usd_env EXTRA_ENVIRONMENT USD_ENVIRONMENT_VAR)
     list(APPEND _result "${TBB_INCLUDE_DIRS}/../bin")
     list(APPEND _result "${USD_GENSCHEMA_DIR}")
     list(APPEND _result "${EXTRA_ENVIRONMENT}") # ????
-    if(WIN32)
-        list(APPEND _result "$ENV{PATH}")
-    else()
+    # The caller's PATH is not appended on Windows: this string ends up as an argument of a
+    # custom command, and CMake turns that into a .bat where the parentheses of
+    # "C:\Program Files (x86)" are not escaped -- cmd.exe then fails the whole rule. The
+    # generator only needs the directories above; it is started by absolute path.
+    if(NOT WIN32)
         list(APPEND _result "$ENV{LD_LIBRARY_PATH}")
         list(APPEND _result "$ENV{PATH}")
     endif()
@@ -779,11 +781,20 @@ function(opendcc_make_shiboken_bindings TARGET_NAME)
         set(_shiboken_clang_args "--clang-options=-include,${DCC_TBB_INCLUDE_DIR}/oneapi/tbb/profiling.h")
     endif()
 
+    # The caller's PATH is left out on Windows: it contains "C:\Program Files (x86)", and the
+    # parentheses are not escaped in the .bat CMake generates for this custom command.
+    if(WIN32)
+        set(_shiboken_runtime_path "${_qt_bin}${OS_ENV_SEPARATOR}${SHIBOKEN_CLANG_INSTALL_DIR}/bin")
+    else()
+        set(_shiboken_runtime_path
+            "${_qt_bin}${OS_ENV_SEPARATOR}${SHIBOKEN_CLANG_INSTALL_DIR}/bin${OS_ENV_SEPARATOR}$ENV{${OS_LIBRARY_ENV_NAME}}")
+    endif()
+
     add_custom_command(
         OUTPUT ${_headers} ${_sources}
         COMMAND
             ${CMAKE_COMMAND} -E env
-            "${OS_LIBRARY_ENV_NAME}=${_qt_bin}${OS_ENV_SEPARATOR}${SHIBOKEN_CLANG_INSTALL_DIR}/bin${OS_ENV_SEPARATOR}$ENV{${OS_LIBRARY_ENV_NAME}}"
+            "${OS_LIBRARY_ENV_NAME}=${_shiboken_runtime_path}"
             "${shiboken_bin}" "--output-directory=${_output_dir}/wrap" ${_shiboken_clang_args}
             "--project-file=${_side_config_file}"
         DEPENDS ${_generator_dependencies} "${_side_config_file}")

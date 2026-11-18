@@ -17,7 +17,8 @@ list(APPEND _USD_DEPS_ENV "${TBB_INCLUDE_DIRS}/../bin")
 list(APPEND _USD_DEPS_ENV "${USD_GENSCHEMA_DIR}")
 
 if(WIN32)
-    list(APPEND _USD_DEPS_ENV "$ENV{PATH}")
+    # No "$ENV{PATH}": "C:\Program Files (x86)" breaks the .bat CMake generates for the
+    # schema command (see get_usd_env()).
     string(JOIN ";" USD_DEPS_ENV ${_USD_DEPS_ENV})
 else()
     list(APPEND _USD_DEPS_ENV "$ENV{LD_LIBRARY_PATH}")

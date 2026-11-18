@@ -17,12 +17,21 @@ function(setup_update_translations OUT_VAR)
         set(OS_LIBRARY_ENV_NAME "LD_LIBRARY_PATH")
     endif()
 
+    # The caller's PATH is left out on Windows: it contains "C:\Program Files (x86)", and the
+    # parentheses are not escaped in the .bat CMake generates for these custom commands.
+    if(WIN32)
+        set(_translations_runtime_path "${Qt_PATH}${OS_ENV_SEPARATOR}${pyside_dir}")
+    else()
+        set(_translations_runtime_path
+            "${Qt_PATH}${OS_ENV_SEPARATOR}${pyside_dir}${OS_ENV_SEPARATOR}$ENV{${OS_LIBRARY_ENV_NAME}}")
+    endif()
+
     add_custom_target(
         update_translations
         DEPENDS "${CMAKE_SOURCE_DIR}/cmake/macros/make_i18n.py"
         COMMAND
             ${CMAKE_COMMAND} -E env
-            "${OS_LIBRARY_ENV_NAME}=${Qt_PATH}${OS_ENV_SEPARATOR}${pyside_dir}${OS_ENV_SEPARATOR}$ENV{${OS_LIBRARY_ENV_NAME}}"
+            "${OS_LIBRARY_ENV_NAME}=${_translations_runtime_path}"
             "${PYTHON_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/cmake/macros/make_i18n.py" make_ts --src_dir
             "${CMAKE_SOURCE_DIR}/src" --output_dir "${CMAKE_SOURCE_DIR}/i18n" --qt_path "${DCC_QT_INSTALL_PREFIX}"
             --lang ${DCC_LANG})
@@ -38,7 +47,7 @@ function(setup_update_translations OUT_VAR)
         DEPENDS ${ts_files} "${CMAKE_SOURCE_DIR}/cmake/macros/make_i18n.py"
         COMMAND
             ${CMAKE_COMMAND} -E env
-            "${OS_LIBRARY_ENV_NAME}=${Qt_PATH}${OS_ENV_SEPARATOR}${pyside_dir}${OS_ENV_SEPARATOR}$ENV{${OS_LIBRARY_ENV_NAME}}"
+            "${OS_LIBRARY_ENV_NAME}=${_translations_runtime_path}"
             "${PYTHON_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/cmake/macros/make_i18n.py" make_qm --qt_path
             "${DCC_QT_INSTALL_PREFIX}" --inputs ${ts_files} --output_dir "${CMAKE_CURRENT_BINARY_DIR}/i18n")
 

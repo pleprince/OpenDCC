@@ -53,14 +53,14 @@ def build(plan: Plan, versions: Versions, jobs: int | None = None, verbose: bool
         "Ninja",
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DCMAKE_INSTALL_PREFIX={prefix}",
-        f"-DCMAKE_PREFIX_PATH={plan.env_prefix}",
+        f"-DCMAKE_PREFIX_PATH={plan.env_cmake_prefix}",
         f"-DPython3_EXECUTABLE={plan.python}",
-        f"-DBOOST_ROOT={plan.env_prefix}",
-        f"-DTBB_ROOT_DIR={plan.env_prefix}",
-        f"-DOIIO_LOCATION={plan.env_prefix}",
-        f"-DOCIO_LOCATION={plan.env_prefix}",
-        f"-DOPENSUBDIV_DIR={plan.env_prefix}",
-        f"-DEMBREE_LOCATION={plan.env_prefix}",
+        f"-DBOOST_ROOT={plan.env_cmake_prefix}",
+        f"-DTBB_ROOT_DIR={plan.env_cmake_prefix}",
+        f"-DOIIO_LOCATION={plan.env_cmake_prefix}",
+        f"-DOCIO_LOCATION={plan.env_cmake_prefix}",
+        f"-DOPENSUBDIV_DIR={plan.env_cmake_prefix}",
+        f"-DEMBREE_LOCATION={plan.env_cmake_prefix}",
     ]
     cmake += _options(plan.platform)
     env = toolchain_environment()

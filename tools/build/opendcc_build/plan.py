@@ -16,7 +16,9 @@ vars the CMake build is configured with.
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -165,6 +167,12 @@ class Plan:
     @property
     def env_prefix(self) -> Path:
         return self.env_dir / ".pixi" / "envs" / "default"
+
+    @property
+    def env_cmake_prefix(self) -> Path:
+        """CMake prefix of the pixi environment: a Windows conda environment keeps
+        include/, lib/ and bin/ under Library/, so the root is not a prefix CMake knows."""
+        return self.env_prefix / "Library" if self.platform.startswith("win") else self.env_prefix
 
     @property
     def deps_prefix(self) -> Path:
@@ -489,7 +497,9 @@ def cmake_cache(plan: Plan) -> dict[str, str]:
         "CMAKE_INSTALL_PREFIX": str(plan.install_dir),
         "CMAKE_EXPORT_COMPILE_COMMANDS": plan.options.get("CMAKE_EXPORT_COMPILE_COMMANDS", "ON"),
         "CMAKE_PREFIX_PATH": ";".join(
-            dict.fromkeys([str(plan.usd_prefix), str(plan.deps_prefix), str(plan.env_prefix)])
+            dict.fromkeys(
+                [str(plan.usd_prefix), str(plan.deps_prefix), str(plan.env_cmake_prefix)]
+            )
         ),
         "USD_ROOT": str(plan.usd_prefix),
         "USD_CONFIG_FILE": str(plan.usd_prefix / "pxrConfig.cmake"),
@@ -501,7 +511,11 @@ def cmake_cache(plan: Plan) -> dict[str, str]:
         cache["PXR_LIB_PREFIX"] = plan.probe.lib_prefix
     for spec in DEPS:
         provider = plan.providers.get(spec.name)
-        prefix = {"usd": plan.usd_prefix, "pixi": plan.env_prefix, "source": plan.deps_prefix}.get(
+        prefix = {
+            "usd": plan.usd_prefix,
+            "pixi": plan.env_cmake_prefix,
+            "source": plan.deps_prefix,
+        }.get(
             provider or ""
         )
         if prefix is None:
@@ -517,8 +531,14 @@ def cmake_cache(plan: Plan) -> dict[str, str]:
 
 
 PYTHON_ABI_PROBE = """
+import os
 import sys
 sys.path.insert(0, {path!r})
+# Since Python 3.8 a Windows extension module resolves its dependencies through
+# os.add_dll_directory(), not PATH: _tf.pyd cannot find tf.dll without this.
+for directory in {dll_dirs!r}:
+    if os.path.isdir(directory) and hasattr(os, "add_dll_directory"):
+        os.add_dll_directory(directory)
 try:
     from pxr import Usd
 except Exception as error:
@@ -538,18 +558,41 @@ def check_python_abi(plan: Plan) -> None:
     from . import pixi
 
     python_path = plan.usd_prefix / "lib" / "python"
-    script = PYTHON_ABI_PROBE.format(path=str(python_path))
-    try:
-        pixi.run(plan.manifest, [str(plan.python), "-c", script], verbose=False)
-    except pixi.PixiError:
-        recorded = plan.probe.python_executable or "an unknown interpreter"
-        raise PlanError(
-            f"this OpenUSD build's python bindings cannot be imported by {plan.python} "
-            f"(OpenUSD was built against {recorded}, which links its own libpython; a process "
-            "cannot hold two).\n"
-            "Build OpenUSD with this build system instead, which makes both sides use one "
-            f"interpreter: `pixi run all -- --release {plan.release}`."
-        ) from None
+    dll_dirs = (
+        [str(plan.usd_prefix / "lib"), str(plan.env_cmake_prefix / "bin")]
+        if plan.platform.startswith("win")
+        else []
+    )
+    script = PYTHON_ABI_PROBE.format(path=str(python_path), dll_dirs=dll_dirs)
+    command = [
+        pixi.ensure(False),
+        "run",
+        "--manifest-path",
+        str(plan.manifest),
+        "--frozen",
+        "--",
+        str(plan.python),
+        "-c",
+        script,
+    ]
+    env = dict(os.environ)
+    if plan.platform.startswith("win"):
+        # Windows has no rpath: PATH is what the loader uses for the tools this probe starts.
+        env["PATH"] = os.pathsep.join(
+            str(prefix) for prefix in (plan.usd_prefix / "lib", plan.env_cmake_prefix / "bin")
+        ) + os.pathsep + env.get("PATH", "")
+    result = subprocess.run(command, capture_output=True, text=True, env=env, check=False)
+    if result.returncode == 0:
+        return
+    recorded = plan.probe.python_executable or "an unknown interpreter"
+    detail = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+    raise PlanError(
+        f"this OpenUSD build's python bindings cannot be imported by {plan.python} "
+        f"(OpenUSD was built against {recorded}).\n"
+        f"{detail}\n"
+        "Build OpenUSD with this build system instead, which makes both sides use one "
+        f"interpreter: `pixi run all -- --release {plan.release}`."
+    ) from None
 
 
 def describe(plan: Plan) -> list[tuple[str, str, str, str]]:

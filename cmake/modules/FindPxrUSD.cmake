@@ -26,10 +26,19 @@ find_path(
     PATHS ${USD_ROOT}/lib $ENV{USD_ROOT}/lib
     DOC "USD Libraries directory")
 
+# parse_usd_schema.py imports this file as a python module, so it has to be the extensionless
+# usdGenSchema script that sits next to the .bat/.cmd wrappers: those are not importable.
+# The search is restricted to this USD prefix so a usdGenSchema on PATH from another install
+# cannot win, and a cache entry pointing outside the prefix (written by a configure that ran
+# before this USD existed) is dropped.
+if(DEFINED USD_GENSCHEMA_SCRIPT AND NOT USD_GENSCHEMA_SCRIPT MATCHES "^${USD_ROOT}/")
+    unset(USD_GENSCHEMA_SCRIPT CACHE)
+endif()
 find_file(
     USD_GENSCHEMA_SCRIPT
-    names usdGenSchema.bat usdGenSchema
+    names usdGenSchema usdGenSchema.bat
     PATHS ${USD_ROOT}/bin $ENV{USD_ROOT}/bin
+    NO_DEFAULT_PATH
     DOC "USD Gen schema application")
 
 set(_run_usd_gen_schema ${USD_GENSCHEMA_SCRIPT})
