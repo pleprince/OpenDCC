@@ -12,10 +12,19 @@ install(
     DESTINATION "${PLUGIN_DIR}"
     USE_SOURCE_PERMISSIONS)
 if(NOT WIN32)
+    # The package loads its libraries from <package>/lib by bare name, so the whole library
+    # directory is copied. conda-forge's graphviz keeps the plugin libraries in lib/graphviz,
+    # which package.toml also names as lib/<name>: flatten that directory into lib too.
     install(
         DIRECTORY "${GRAPHVIZ_LIBRARY_DIR}"
         DESTINATION "${PLUGIN_DIR}"
         USE_SOURCE_PERMISSIONS)
+    if(IS_DIRECTORY "${GRAPHVIZ_LIBRARY_DIR}/graphviz")
+        install(
+            DIRECTORY "${GRAPHVIZ_LIBRARY_DIR}/graphviz/"
+            DESTINATION "${PLUGIN_DIR}/lib"
+            USE_SOURCE_PERMISSIONS)
+    endif()
 endif()
 
 file(READ package.toml CONTENTS)

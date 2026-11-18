@@ -40,10 +40,33 @@ def build(
     _run_in(plan, argv, verbose)
 
 
-def install(plan: Plan, verbose: bool = True) -> None:
+def install(plan: Plan, versions=None, verbose: bool = True) -> None:
     _require_configured(plan)
     _run_in(plan, ["cmake", "--install", str(plan.cmake_dir)], verbose)
+    _install_ocio_config(plan, versions, verbose)
     write_environment_script(plan, verbose)
+
+
+def _install_ocio_config(plan: Plan, versions, verbose: bool) -> None:
+    """Install the OCIO config the application loads when $OCIO is not set.
+
+    OpenDCC's color management reads <install>/ocio/config.ocio and silently falls back to
+    OpenColorIO's legacy built-in config when it is missing, which has no display view and leaves
+    the viewport without a valid display transform.
+    """
+    if versions is None:
+        return
+    component = versions.sources.get("ocio-config")
+    if component is None:
+        return
+    from .sources import download
+
+    source = download(component, plan.root, verbose)
+    target = plan.install_dir / "ocio"
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, target / "config.ocio")
+    if verbose:
+        print(f"OCIO config: {target / 'config.ocio'}", flush=True)
 
 
 def write_environment_script(plan: Plan, verbose: bool = True) -> None:

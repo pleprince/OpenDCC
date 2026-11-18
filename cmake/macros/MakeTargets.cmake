@@ -266,6 +266,20 @@ function(opendcc_make_library TARGET_NAME)
         endif()
     endif()
 
+    # A package library is installed to <prefix>/packages/<package>/lib and refers to the
+    # libraries of the packages it depends on by bare name (@rpath/libX.dylib), because they are
+    # installed under their own package directory, not under lib/. The relative paths to those
+    # directories are added once every target exists (opendcc_finalize_package_rpaths), since a
+    # dependency may be declared after its user.
+    if(DEFINED args_PACKAGE_DIR AND NOT WIN32)
+        set_property(
+            TARGET ${TARGET_NAME}
+            APPEND
+            PROPERTY INSTALL_RPATH "@loader_path/../../../lib" "@loader_path/../../../plugin/usd")
+        set_property(TARGET ${TARGET_NAME} PROPERTY OPENDCC_INSTALL_LIB_DIR "${_library_destination}")
+        set_property(GLOBAL APPEND PROPERTY OPENDCC_PACKAGE_TARGETS "${TARGET_NAME}")
+    endif()
+
     install(
         TARGETS ${TARGET_NAME}
         EXPORT ${TARGET_NAME}-targets
@@ -865,4 +879,40 @@ function(opendcc_make_shiboken_bindings TARGET_NAME)
     if(args_VS_FOLDER)
         make_folder("${args_VS_FOLDER}" ${TARGET_NAME})
     endif()
+endfunction()
+
+# Every package dylib is dlopen'ed on its own, so dyld resolves its @rpath references against that
+# dylib's own LC_RPATH list -- the executable's does not apply. Point each package at the install
+# directories of the package targets it links directly.
+function(opendcc_finalize_package_rpaths)
+    if(WIN32)
+        return()
+    endif()
+    get_property(_targets GLOBAL PROPERTY OPENDCC_PACKAGE_TARGETS)
+    foreach(_target IN LISTS _targets)
+        if(NOT TARGET ${_target})
+            continue()
+        endif()
+        get_target_property(_own_dir ${_target} OPENDCC_INSTALL_LIB_DIR)
+        if(NOT _own_dir)
+            continue()
+        endif()
+        get_target_property(_links ${_target} LINK_LIBRARIES)
+        set(_entries "")
+        foreach(_link IN LISTS _links)
+            if(NOT TARGET ${_link})
+                continue()
+            endif()
+            get_target_property(_dep_dir ${_link} OPENDCC_INSTALL_LIB_DIR)
+            if(NOT _dep_dir)
+                continue()
+            endif()
+            file(RELATIVE_PATH _relative "/prefix/${_own_dir}" "/prefix/${_dep_dir}")
+            list(APPEND _entries "@loader_path/${_relative}")
+        endforeach()
+        if(_entries)
+            list(REMOVE_DUPLICATES _entries)
+            set_property(TARGET ${_target} APPEND PROPERTY INSTALL_RPATH ${_entries})
+        endif()
+    endforeach()
 endfunction()

@@ -233,7 +233,7 @@ def _build(args: argparse.Namespace) -> int:
 
 def _install(args: argparse.Namespace) -> int:
     plan, _ = _load(args.build)
-    cmake_build.install(plan)
+    cmake_build.install(plan, _versions())
     print(f"installed into {plan.install_dir}")
     return 0
 
@@ -255,7 +255,7 @@ def _all(args: argparse.Namespace) -> int:
 
     cmake_build.configure(plan)
     cmake_build.build(plan, jobs=args.jobs)
-    cmake_build.install(plan)
+    cmake_build.install(plan, _versions())
     print(f"installed into {plan.install_dir}", flush=True)
     if not args.no_tests:
         _report_tests(plan)

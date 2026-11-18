@@ -50,5 +50,8 @@ if(DCC_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
+# Needs every target: a package's dependencies may be declared after the package itself.
+opendcc_finalize_package_rpaths()
+
 include(InstallDependencies)
 include(InstallStartupConfigs)

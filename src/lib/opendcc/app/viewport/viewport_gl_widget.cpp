@@ -8,6 +8,7 @@
 #include <pxr/imaging/glf/glew.h>
 #else
 #include <pxr/imaging/garch/glApi.h>
+#include "opendcc/app/viewport/viewport_gl_debug_group.h"
 #endif
 #include <pxr/base/gf/gamma.h>
 #include <pxr/usd/usd/stage.h>
@@ -304,13 +305,15 @@ void ViewportGLWidget::paintGL()
     m_params.invised_paths_dirty = false;
     m_params.visibility_mask.mark_clean();
 
-    glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportColorCorrection");
-    m_color_correction->apply(m_viewport_view);
-    glPopDebugGroup();
+    {
+        const GLScopedDebugGroup debug_group(GL_DEBUG_SOURCE_THIRD_PARTY, 0, "ViewportColorCorrection");
+        m_color_correction->apply(m_viewport_view);
+    }
 
-    glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportBackgroundDisplay");
-    m_background_drawer->draw_display();
-    glPopDebugGroup();
+    {
+        const GLScopedDebugGroup debug_group(GL_DEBUG_SOURCE_THIRD_PARTY, 0, "ViewportBackgroundDisplay");
+        m_background_drawer->draw_display();
+    }
 
     if (!engine->is_converged())
     {
@@ -319,19 +322,17 @@ void ViewportGLWidget::paintGL()
 
     if (auto tool = ApplicationUI::instance().get_current_viewport_tool())
     {
-        glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "CurrentViewportTool");
+        const GLScopedDebugGroup debug_group(GL_DEBUG_SOURCE_THIRD_PARTY, 0, "CurrentViewportTool");
         tool->draw(m_viewport_view, m_ui_draw_manager);
-        glPopDebugGroup();
     }
 
     if (!m_extensions.empty())
     {
-        glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportDrawExtensions");
+        const GLScopedDebugGroup debug_group(GL_DEBUG_SOURCE_THIRD_PARTY, 0, "ViewportDrawExtensions");
         for (auto& extension : m_extensions)
         {
             extension->draw(m_ui_draw_manager, m_camera_controller->get_frustum(), m_params.render_resolution[0], m_params.render_resolution[1]);
         }
-        glPopDebugGroup();
     }
 
 #if PXR_VERSION >= 2205

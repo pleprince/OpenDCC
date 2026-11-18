@@ -8,6 +8,7 @@
 #include <pxr/imaging/garch/gl.h>
 #endif
 #include "opendcc/app/viewport/viewport_ui_draw_manager.h"
+#include "opendcc/app/viewport/viewport_gl_debug_group.h"
 #include <pxr/usd/usdGeom/tokens.h>
 
 OPENDCC_NAMESPACE_OPEN
@@ -275,7 +276,7 @@ void ViewportGrid::draw(const GfFrustum& frustum)
     if (!m_enable)
         return;
 
-    glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportGrid");
+    const GLScopedDebugGroup debug_group(GL_DEBUG_SOURCE_THIRD_PARTY, 0, "ViewportGrid");
 
     GfMatrix4f proj;
     GfMatrix4f view;
@@ -334,7 +335,6 @@ void ViewportGrid::draw(const GfFrustum& frustum)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_PRIMITIVE_RESTART);
 
-    glPopDebugGroup();
 }
 
 void OPENDCC_NAMESPACE::ViewportGrid::set_min_step(double min_step)

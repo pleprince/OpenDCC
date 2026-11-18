@@ -6,6 +6,7 @@
 #include <GL/glew.h>
 #else
 #include <pxr/imaging/garch/gl.h>
+#include "opendcc/app/viewport/viewport_gl_debug_group.h"
 #endif
 #include <QImage>
 #include <QOpenGLFramebufferObject>
@@ -337,7 +338,7 @@ void ViewportUiDrawManager::set_point_size(float point_size)
 void ViewportUiDrawManager::execute_draw_queue(unsigned width, unsigned height, uint32_t mouse_x, uint32_t mouse_y, const GfMatrix4f& proj,
                                                const GfMatrix4f& view)
 {
-    glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "ViewportUiDrawManager");
+    const GLScopedDebugGroup debug_group(GL_DEBUG_SOURCE_THIRD_PARTY, 0, "ViewportUiDrawManager");
 
     if (width != m_width || height != m_height)
         create_framebuffer(width, height);
@@ -523,8 +524,6 @@ void ViewportUiDrawManager::execute_draw_queue(unsigned width, unsigned height, 
         }
     }
     m_gpu_data->m_render_program->release();
-
-    glPopDebugGroup();
 }
 
 void ViewportUiDrawManager::mesh(PrimitiveType prim_type, const std::vector<GfVec3f>& vertex_buffer)

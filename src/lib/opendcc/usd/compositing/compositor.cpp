@@ -5,6 +5,7 @@
 #include "opendcc/usd/compositing/layer.h"
 
 #include <pxr/imaging/garch/glApi.h>
+#include "opendcc/app/viewport/viewport_gl_debug_group.h"
 #include <pxr/imaging/hgi/tokens.h>
 #include <pxr/base/vt/value.h>
 
@@ -17,7 +18,7 @@ void Compositor::add_layer(const std::shared_ptr<Layer> layer)
 
 void Compositor::composite(const int in, PXR_NS::Hgi* hgi)
 {
-    glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 0, -1, "Compositor");
+    const GLScopedDebugGroup debug_group(GL_DEBUG_SOURCE_THIRD_PARTY, 0, "Compositor");
 
     const auto in_value = PXR_NS::VtValue(static_cast<uint32_t>(in));
     for (const auto layer : m_layers)
@@ -55,8 +56,6 @@ void Compositor::composite(const int in, PXR_NS::Hgi* hgi)
 
         layer->end_render();
     }
-
-    glPopDebugGroup();
 }
 
 OPENDCC_NAMESPACE_CLOSE

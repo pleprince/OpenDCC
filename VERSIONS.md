@@ -90,6 +90,11 @@ no `osx-arm64` build at all), so the build compiles them once into `<build>/deps
 | sentry-native | 0.17.6 | https://github.com/getsentry/sentry-native/archive/refs/tags/0.17.6.tar.gz |
 | OpenMesh | 9.0.0 | https://www.openmesh.org/media/Releases/9.0/OpenMesh-9.0.tar.gz |
 | libigl | 2.6.0 | https://codeload.github.com/libigl/libigl/tar.gz/refs/tags/v2.6.0 |
+| ocio-config | 4.0 | https://github.com/AcademySoftwareFoundation/OpenColorIO-Config-ACES/releases/download/v4.0.0/cg-config-v4.0.0_aces-v2.0_ocio-v2.5.ocio |
+
+The OCIO row is not built: it is the ACES CG config the install ships as `ocio/config.ocio`, the
+file OpenDCC's color management loads when `$OCIO` is not set. Without it the application falls
+back to OpenColorIO's built-in legacy config and the viewport cannot build a display transform.
 
 sentry-native is built with `SENTRY_BACKEND=none`: the crash reporter is off by default, and the
 in-app reporter needs a crashpad build that no channel publishes (`DCC_BUILD_CRASH_REPORTER=ON`

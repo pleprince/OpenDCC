@@ -56,6 +56,7 @@ HEADERS = {
     "sentry": "sentry",
     "libigl": "libigl",
     "openmesh": "openmesh",
+    "ocio-config": "ocio-config",
     "jinja2": "jinja2",
     "six": "six",
     "pygments": "pygments",

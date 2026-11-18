@@ -177,6 +177,13 @@ Three things make that work, and none of them needs a wrapper script:
 - **python path**: the embedded interpreter prepends `<install>/lib/python` and
   `<install>/lib/python<major>.<minor>/site-packages`, so `pxr` and `opendcc` import without
   `PYTHONPATH`.
+- **package libraries**: a package is dlopen'ed on its own, so dyld resolves its `@rpath`
+  references against that library's own `LC_RPATH`. Each package library therefore carries the
+  relative paths to `lib`, `plugin/usd` and the package directories of the targets it links
+  (`opendcc_finalize_package_rpaths`).
+- **OCIO**: the ACES CG config from `VERSIONS.md` is installed as `ocio/config.ocio`, the file
+  color management loads when `$OCIO` is unset. Without it OpenColorIO falls back to its legacy
+  built-in config, which has no display view.
 
 `opendcc-env.sh` is still generated (and `DCC_INSTALL_*` off still produces a tree that needs it),
 but it is no longer required: it exists for running a build tree's install alongside other tools
@@ -220,6 +227,11 @@ in the environment, and reproduce on any build of this commit:
   `cl.exe` is not already on `PATH`.
 - **CMake 4** rejects the `cmake_minimum_required` of some old third-party sources; the OpenMesh
   build passes `CMAKE_POLICY_VERSION_MINIMUM=3.5` for that reason.
+- **GL debug annotations** (`glPushDebugGroup`) are OpenGL 4.3 entry points; macOS stops at 4.1
+  and the API loader leaves them null, so `GLScopedDebugGroup` makes them a no-op when absent.
+- **graphviz package**: conda-forge keeps the plugin libraries in `lib/graphviz`, which the
+  package flattens into its own `lib`. A few names in its `package.toml` are Windows-only
+  (`libgvplugin_gdiplus`) and are reported as load failures on macOS; the package still works.
 - **Reconfiguring from scratch**: `pixi run clean` (or delete `build/<slug>`). Deleting only
   `build/<slug>/cmake` keeps the environment and the source-built dependencies.
 
