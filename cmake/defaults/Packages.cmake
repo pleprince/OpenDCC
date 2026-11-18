@@ -86,6 +86,9 @@ if(DCC_USE_PYTHON_3)
             REQUIRED)
     endif()
 
+    # Fails when this is not the interpreter the plan resolved (see cmake/defaults/PythonVersion.cmake).
+    dcc_require_python_version()
+
     find_package(PythonInterp 3.0 REQUIRED)
     find_package(PythonLibs 3.0 REQUIRED)
     find_package(pybind11 REQUIRED)

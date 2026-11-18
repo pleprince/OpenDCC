@@ -22,6 +22,7 @@ vars the CMake build is configured with.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -47,6 +48,9 @@ class Dep:
     cmake_vars: tuple[str, ...] = ()
     usd_aware: bool = False  # a copy inside the OpenUSD prefix can satisfy it
     abi_critical: bool = False  # must be the same build as USD's, not merely the same version
+    # Import name of a python package the interpreter must be able to load. A conda package that
+    # ships an extension module is built per interpreter; this is what the plan verifies.
+    python_module: str | None = None
 
 
 DEPS: tuple[Dep, ...] = (
@@ -69,7 +73,9 @@ DEPS: tuple[Dep, ...] = (
     Dep("openshadinglanguage", ("openshadinglanguage",), ("OSL_ROOT",)),
     # Toolchain and opendcc-only dependencies.
     Dep("qt", ("qt6-main", "qt6-multimedia"), cmake_vars=()),
-    Dep("pyside", ("pyside6",)),
+    # opendcc's python panels import PySide6; PySide6 and shiboken6 ship in this package and are
+    # built per interpreter, so the plan proves they load.
+    Dep("pyside", ("pyside6",), python_module="PySide6"),
     Dep("pybind11", ("pybind11",)),
     Dep("libclang", ("libclang",), ("SHIBOKEN_CLANG_INSTALL_DIR",)),
     Dep("glew", ("glew",), ("GLEW_LOCATION",)),
@@ -90,11 +96,12 @@ DEPS: tuple[Dep, ...] = (
     # Imported by OpenUSD's usdGenSchema, which the build runs with this environment's python.
     Dep("jinja2", ("jinja2",)),
     # Imported by opendcc's python packages (src/python, src/packages): six and Qt.py by the
-    # panels/menus, pygments by the script editor, numpy by the bullet physics UI.
-    Dep("six", ("six",)),
-    Dep("pygments", ("pygments",)),
-    Dep("qt.py", ("qt.py",)),
-    Dep("numpy", ("numpy",)),
+    # panels/menus, pygments by the script editor, numpy by the bullet physics UI. jinja2 is a
+    # pure-python build requirement of usdGenSchema, so it is not import-checked per interpreter.
+    Dep("six", ("six",), python_module="six"),
+    Dep("pygments", ("pygments",), python_module="pygments"),
+    Dep("qt.py", ("qt.py",), python_module="Qt"),
+    Dep("numpy", ("numpy",), python_module="numpy"),
     # Built from source into the plan's deps prefix (see VERSIONS.md, Source-built dependencies).
     Dep("qtads", None),
     Dep("sentry", None),
@@ -306,9 +313,7 @@ def _platform() -> str:
     return pixi.platform_key()
 
 
-def _layers(
-    plan: Plan, versions: versions_mod.Versions
-) -> list[tuple[str, dict[str, str]]]:
+def _layers(plan: Plan, versions: versions_mod.Versions) -> list[tuple[str, dict[str, str]]]:
     """The declared versions, lowest precedence first.
 
     Build platform is the highest declared layer on purpose: it holds OpenDCC's own components
@@ -318,9 +323,7 @@ def _layers(
     """
     layers: list[tuple[str, dict[str, str]]] = []
     if plan.release in versions.releases:
-        layers.append(
-            (f"OpenUSD {plan.release} stack", dict(versions.releases[plan.release].pins))
-        )
+        layers.append((f"OpenUSD {plan.release} stack", dict(versions.releases[plan.release].pins)))
     if plan.vfx:
         layers.append((plan.vfx, dict(versions.vfx_platform(plan.vfx).pins)))
     layers.append(("Build platform", dict(versions.platform)))
@@ -416,9 +419,7 @@ def _report_platform_overrides(
         declared, where = _declared(name, layers[:index])
         if declared is None or _same_series(declared, version):
             continue
-        override = (
-            f"--python {declared}" if name == PYTHON else f"--pin {name}={declared}"
-        )
+        override = f"--python {declared}" if name == PYTHON else f"--pin {name}={declared}"
         plan.warnings.append(
             f"{plan.vfx} sets {name} {version}; VERSIONS.md {where} declares {declared} "
             f"(pass {override} to keep the local one)"
@@ -623,20 +624,33 @@ def _pixi_packages(dep_name: str) -> tuple[str, ...]:
 # environment verification: what the environment actually installed
 
 
-def installed_versions(prefix: Path) -> dict[str, str]:
-    """Read the versions pixi installed, from the environment's conda metadata."""
+def installed_metadata(prefix: Path) -> dict[str, dict]:
+    """Read the conda records pixi installed: package name -> the record (version, depends, ...)."""
     meta = prefix / "conda-meta"
-    out: dict[str, str] = {}
+    out: dict[str, dict] = {}
     if not meta.is_dir():
         return out
     for entry in sorted(meta.glob("*.json")):
-        # filenames are <name>-<version>-<build>.json
-        stem = entry.name[: -len(".json")]
-        parts = stem.rsplit("-", 2)
-        if len(parts) != 3:
+        try:
+            data = json.loads(entry.read_text())
+        except (OSError, json.JSONDecodeError):
             continue
-        out[parts[0]] = parts[1]
+        name, version = data.get("name"), data.get("version")
+        if not name or not version:
+            # filenames are <name>-<version>-<build>.json
+            parts = entry.name[: -len(".json")].rsplit("-", 2)
+            if len(parts) != 3:
+                continue
+            name, version = name or parts[0], version or parts[1]
+        out[str(name)] = {**data, "name": name, "version": version}
     return out
+
+
+def installed_versions(prefix: Path) -> dict[str, str]:
+    """Read the versions pixi installed, from the environment's conda metadata."""
+    return {
+        name: str(record.get("version", "")) for name, record in installed_metadata(prefix).items()
+    }
 
 
 def verify(plan: Plan) -> list[tuple[str, str, str, str, str]]:
@@ -705,6 +719,9 @@ def cmake_cache(plan: Plan) -> dict[str, str]:
         "USD_CONFIG_FILE": str(plan.usd_prefix / "pxrConfig.cmake"),
         "Python3_EXECUTABLE": str(plan.python),
         "PYTHON_EXECUTABLE": str(plan.python),
+        # Checked by cmake/defaults/PythonVersion.cmake: configuring against another interpreter
+        # builds shiboken bindings for one python and embeds another.
+        "DCC_EXPECTED_PYTHON_VERSION": plan.resolved.get(PYTHON, ""),
     }
     if not plan.platform.startswith("win"):
         # The install is not self-contained: its libraries sit next to the binaries and OpenUSD,
@@ -799,6 +816,100 @@ def check_python_abi(plan: Plan) -> None:
         "Build OpenUSD with this build system instead, which makes both sides use one "
         f"interpreter: `pixi run all -- --release {plan.release}`."
     ) from None
+
+
+def python_dependency_rows(plan: Plan) -> list[tuple[str, str, str, str, str, str]]:
+    """(dependency, module, package, built for, interpreter, status) for the python packages.
+
+    A conda package that ships an extension module (`python_abi`) is built for one interpreter
+    series, and the environment's interpreter is the one opendcc embeds -- a different series is
+    not a warning. A noarch package states only a minimum python; that is checked as a floor.
+    """
+    records = installed_metadata(plan.env_prefix)
+    interpreter = str(records.get(PYTHON, {}).get("version", ""))
+    if not interpreter:
+        return []
+    series = ".".join(interpreter.split(".")[:2])
+    rows: list[tuple[str, str, str, str, str, str]] = []
+    for spec in DEPS:
+        if not spec.python_module:
+            continue
+        package = (spec.pixi or ("",))[0]
+        record = records.get(package)
+        requirement = _python_requirement(record)
+        if record is None:
+            built_for, status = "any", "missing"
+        elif requirement is None:
+            built_for, status = "any", "ok"
+        else:
+            kind, wanted = requirement
+            if kind == "abi":
+                built_for = wanted
+                status = "ok" if wanted == series else "mismatch"
+            else:
+                built_for = f">={wanted}"
+                status = "ok" if _parts(interpreter) >= _parts(wanted) else "mismatch"
+        rows.append((spec.name, spec.python_module, package, built_for, series, status))
+    return rows
+
+
+def _python_requirement(record: dict | None) -> tuple[str, str] | None:
+    """('abi', series) for a compiled package, ('min', series) for a noarch one."""
+    if not record:
+        return None
+    for entry in record.get("depends", []):
+        fields = entry.split()
+        if fields[:1] == ["python_abi"] and len(fields) > 1:
+            return ("abi", fields[1].rstrip(".*"))
+    for entry in record.get("depends", []):
+        match = re.match(r"python\s+>=\s*(\d+\.\d+)", entry)
+        if match:
+            return ("min", match.group(1))
+    return None
+
+
+def check_python_imports(plan: Plan, modules: list[str]) -> None:
+    """Run the plan's interpreter on ``import <module>`` for each and fail with its error."""
+    if not modules or not plan.env_prefix.is_dir():
+        return
+    from . import pixi
+
+    script = "\n".join(f"import {module}" for module in modules)
+    command = [
+        pixi.ensure(False),
+        "run",
+        "--manifest-path",
+        str(plan.manifest),
+        "--frozen",
+        "--",
+        str(plan.python),
+        "-c",
+        script,
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode == 0:
+        return
+    detail = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+    raise PlanError(
+        f"the environment's interpreter ({plan.python}) cannot import every python dependency "
+        f"this plan pins ({', '.join(modules)}):\n{detail}\n"
+        "The environment was built for another Python: run `pixi run plan` again, or pass "
+        "--python with a version these packages are published for."
+    )
+
+
+def check_python_packages(plan: Plan) -> None:
+    """Prove the environment's python carries what opendcc imports, at the right ABI."""
+    mismatched = [row for row in python_dependency_rows(plan) if row[5] == "mismatch"]
+    if mismatched:
+        listing = "; ".join(
+            f"{row[2]} was built for Python {row[3]}, the environment has {row[4]}"
+            for row in mismatched
+        )
+        raise PlanError(
+            f"the environment's python packages do not match its interpreter: {listing}"
+        )
+    check_python_imports(plan, [spec.python_module for spec in DEPS if spec.python_module])
 
 
 def describe(plan: Plan) -> list[tuple[str, str, str, str, str]]:

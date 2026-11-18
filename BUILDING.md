@@ -104,6 +104,26 @@ Four limits are deliberate:
 The year is part of the build tree's slug (`osx-arm64-usd25.11-cy2025-src`), so two stacks for
 one OpenUSD tag never share a tree.
 
+## Python
+
+The interpreter is a resolved dependency like any other (`VERSIONS.md`, a platform year, or
+`--python`), so the python packages that belong to it are resolved with it and checked:
+
+- **plan** reads the conda records of what pixi installed. Every package that ships a python
+  module (`numpy`, `pyside6`, `six`, `pygments`, `qt.py`) must have been built for the
+  environment's interpreter series, and the report prints the table (`dependency`, `module`,
+  `package`, `built for`, `interpreter`, `status`).
+- **plan** also runs `import numpy, PySide6, six, pygments, Qt` with that interpreter and fails
+  with the traceback, which is what an environment resolved against a different Python looks
+  like. `jinja2` is not in that list: it is a pure-python build requirement of `usdGenSchema`.
+- **configure** re-runs both checks against the stored plan, and the CMake cache carries
+  `DCC_EXPECTED_PYTHON_VERSION`. `cmake/defaults/PythonVersion.cmake` then refuses to configure
+  when `find_package(Python3)` lands on another series than the plan's, instead of building
+  shiboken bindings for one interpreter and embedding another.
+
+`--python 3.13` therefore either produces an environment whose python packages match it, or the
+plan fails before the build starts.
+
 ## Build against an existing OpenUSD
 
 ```sh

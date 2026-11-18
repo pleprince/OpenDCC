@@ -242,6 +242,9 @@ def _usd(args: argparse.Namespace) -> int:
 
 def _configure(args: argparse.Namespace) -> int:
     plan, _ = _load(args.build)
+    # The environment must still be the one the plan pinned: a stale or hand-edited environment
+    # configures a build whose python packages are for another interpreter.
+    planner.check_python_packages(plan)
     cmake_build.configure(plan, extra=args.cmake_arg)
     print(f"build tree: {plan.cmake_dir}")
     return 0
@@ -324,8 +327,7 @@ def _release_and_platform(args: argparse.Namespace) -> tuple[str | None, str | N
             continue
         if tag is not None:
             raise planner.PlanError(
-                "--release takes one OpenUSD tag and one platform year, got "
-                + ", ".join(tokens)
+                "--release takes one OpenUSD tag and one platform year, got " + ", ".join(tokens)
             )
         tag = token
     if tokens and tag is None:
@@ -375,6 +377,7 @@ def _make_and_install(args: argparse.Namespace) -> planner.Plan:
         )
         raise planner.PlanError(f"{error}{hint}") from None
     planner.check_python_abi(plan)
+    planner.check_python_packages(plan)
     state.save(plan)
     return plan
 
@@ -400,6 +403,7 @@ def _record_built_usd(plan: planner.Plan, prefix: Path) -> None:
     ]
     plan.warnings.extend(f"OpenUSD disagrees with the plan: {row}" for row in drift)
     planner.check_python_abi(plan)
+    planner.check_python_packages(plan)
     state.save(plan)
 
 
@@ -424,6 +428,13 @@ def _report(plan: planner.Plan) -> None:
     print()
     rows = planner.verify(plan)
     _print_table(rows, ("dependency", "provider", "wanted", "installed", "status"))
+    python_rows = planner.python_dependency_rows(plan)
+    if python_rows:
+        print()
+        _print_table(
+            python_rows,
+            ("dependency", "module", "package", "built for", "interpreter", "status"),
+        )
     mismatches = [row for row in rows if row[4] == "mismatch"]
     for warning in plan.warnings:
         print(f"warning: {warning}")
